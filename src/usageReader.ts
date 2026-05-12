@@ -71,8 +71,15 @@ function recordPasses(r: UsageRecord, f: FilterOptions): boolean {
   return true;
 }
 
+interface FileCacheEntry {
+  mtimeMs: number;
+  size: number;
+  records: UsageRecord[];
+}
+
 export class UsageReader {
   private readonly usageDir: string;
+  private readonly fileCache = new Map<string, FileCacheEntry>();
 
   constructor(rootOverride?: string) {
     this.usageDir = getPaths(rootOverride).usage;
@@ -91,8 +98,61 @@ export class UsageReader {
     return Array.from(dates).sort();
   }
 
+  // Reuses parsed records when (mtimeMs, size) is unchanged, so historical
+  // files cost nothing to re-read across polls. If a past day's file gets
+  // appended (e.g. a backfilled or late-flushed event), the signature
+  // changes and that single file is re-parsed.
+  private loadFileRecords(date: string): UsageRecord[] {
+    const file = path.join(this.usageDir, `${date}.usage.jsonl`);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(file);
+    } catch {
+      this.fileCache.delete(file);
+      return [];
+    }
+
+    const cached = this.fileCache.get(file);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.records;
+    }
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(file, 'utf8');
+    } catch {
+      return cached?.records ?? [];
+    }
+
+    const records: UsageRecord[] = [];
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      if (!line) { continue; }
+      try {
+        records.push(JSON.parse(line) as UsageRecord);
+      } catch {
+        // partial / malformed line — skip
+      }
+    }
+
+    this.fileCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, records });
+    return records;
+  }
+
+  private evictMissingFiles(validDates: string[]) {
+    const validFiles = new Set(
+      validDates.map(d => path.join(this.usageDir, `${d}.usage.jsonl`)),
+    );
+    for (const file of Array.from(this.fileCache.keys())) {
+      if (!validFiles.has(file)) {
+        this.fileCache.delete(file);
+      }
+    }
+  }
+
   *iterateRecords(filter: FilterOptions = {}): Generator<UsageRecord> {
     const dates = this.listAvailableDates();
+    this.evictMissingFiles(dates);
     const startD = filter.startDate;
     const endD = filter.endDate;
     const seen = new Set<string>();
@@ -101,22 +161,8 @@ export class UsageReader {
       if (startD && d < startD) { continue; }
       if (endD && d > endD) { continue; }
 
-      const file = path.join(this.usageDir, `${d}.usage.jsonl`);
-      let raw: string;
-      try {
-        raw = fs.readFileSync(file, 'utf8');
-      } catch {
-        continue;
-      }
-      const lines = raw.split(/\r?\n/);
-      for (const line of lines) {
-        if (!line) { continue; }
-        let rec: UsageRecord;
-        try {
-          rec = JSON.parse(line);
-        } catch {
-          continue; // partial / malformed line — skip
-        }
+      const records = this.loadFileRecords(d);
+      for (const rec of records) {
         // Dedupe across reads.
         const key = rec.event_key || `${rec.session_id || ''}|${rec.request_id || ''}|${rec.timestamp}`;
         if (seen.has(key)) { continue; }
