@@ -1,0 +1,13 @@
+{
+  "name": "claude-code-usage-tracker-collector",
+  "version": "0.1.0",
+  "description": "Local OTLP/HTTP receiver for Claude Code usage telemetry. Zero dependencies.",
+  "private": true,
+  "main": "collector.js",
+  "bin": {
+    "claude-usage-collector": "collector.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
