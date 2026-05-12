@@ -749,4 +749,55 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .svg-tooltip rect { fill: hsl(var(--card)); stroke: hsl(var(--border)); rx: 6; }
 .svg-tooltip text { fill: hsl(var(--foreground)); }
 .svg-tooltip .label { fill: hsl(var(--muted-foreground)); font-size: 10px; }
+
+/* ============================== FLOATING HTML TOOLTIP ============================== */
+/* Used by donut slices, horizontal bar rows, and heatmap cells. Anchored to the
+   cursor by chartTooltip helpers in charts.ts. */
+.chart-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  max-width: 320px;
+  white-space: nowrap;
+}
+.chart-tooltip .title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-tooltip .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-tooltip .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.chart-tooltip .value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.chart-tooltip .label {
+  color: hsl(var(--muted-foreground));
+}
+
+.donut-slice { transition: opacity 0.15s ease; }
+.donut-slice:hover { opacity: 0.82; }
+.bar-row { transition: background-color 0.15s ease; border-radius: 4px; }
+.bar-row:hover { background: hsl(var(--accent) / 0.4); }
 `;

@@ -19,6 +19,28 @@ import type {
 
 const DATE_RE = /^(\d{4}-\d{2}-\d{2})\.usage\.jsonl$/;
 
+/**
+ * Canonicalize a workspace path so the same directory always groups under one
+ * key. On Windows the same folder can show up with different drive-letter
+ * casing or path-separator style depending on where `cwd` is captured (the
+ * SessionStart hook gets it from Claude Code, which inherits from the parent
+ * shell — VS Code lowercases the drive, Explorer/PowerShell often uppercase).
+ * Without this, "C:\\foo" and "c:\\foo" become two rows in Top workspaces.
+ */
+export function normalizeWorkspace(ws: string | undefined | null): string | undefined {
+  if (!ws) { return undefined; }
+  let s = String(ws).trim();
+  if (!s) { return undefined; }
+  if (/^[A-Za-z]:/.test(s)) {
+    // Windows path: unify separators to backslash, strip trailing, lowercase drive.
+    s = s.replace(/\//g, '\\').replace(/\\+$/, '');
+    s = s[0].toLowerCase() + s.slice(1);
+  } else {
+    s = s.replace(/\/+$/, '');
+  }
+  return s;
+}
+
 function emptyTotals(): AggregatedTotals {
   return {
     cost: 0,
@@ -137,11 +159,12 @@ export class UsageReader {
         if (!line) { continue; }
         try {
           const j = JSON.parse(line) as { session_id?: string; workspace?: string };
-          if (j.session_id && j.workspace) {
+          const ws = normalizeWorkspace(j.workspace);
+          if (j.session_id && ws) {
             // Last-write-wins: a session_id seen multiple times keeps the
             // most recent workspace (cd'd into a different repo mid-session
             // is a rare case and we want the latest signal).
-            map.set(j.session_id, j.workspace);
+            map.set(j.session_id, ws);
           }
         } catch {
           // skip malformed line
@@ -227,6 +250,12 @@ export class UsageReader {
     const endD = filter.endDate;
     const seen = new Set<string>();
 
+    // Normalize the workspace filter once so it can compare equal to the
+    // normalized workspace we attach to each record below.
+    const normalizedFilter: FilterOptions = filter.workspace
+      ? { ...filter, workspace: normalizeWorkspace(filter.workspace) }
+      : filter;
+
     for (const d of dates) {
       if (startD && d < startD) { continue; }
       if (endD && d > endD) { continue; }
@@ -241,13 +270,18 @@ export class UsageReader {
         // record itself doesn't carry one (Claude Code's OTLP currently does
         // not include cwd). Filtering by workspace happens AFTER backfill so
         // the workspace dropdown actually works.
+        //
+        // Whatever source the workspace comes from, run it through
+        // normalizeWorkspace so downstream aggregations see one canonical key
+        // per directory (e.g. "C:\foo" and "c:\foo" collapse).
         let effective = rec;
-        if (!rec.workspace && rec.session_id) {
-          const ws = sessionMeta.get(rec.session_id);
-          if (ws) { effective = { ...rec, workspace: ws }; }
+        const rawWs = rec.workspace || (rec.session_id ? sessionMeta.get(rec.session_id) : undefined);
+        const ws = normalizeWorkspace(rawWs);
+        if (ws !== rec.workspace) {
+          effective = { ...rec, workspace: ws };
         }
 
-        if (!recordPasses(effective, filter)) { continue; }
+        if (!recordPasses(effective, normalizedFilter)) { continue; }
         yield effective;
       }
     }

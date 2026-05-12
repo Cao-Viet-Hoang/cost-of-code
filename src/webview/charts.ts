@@ -8,6 +8,54 @@ function svgEl(name, attrs) {
 }
 function clearSvg(svg) { while (svg.firstChild) svg.removeChild(svg.firstChild); }
 
+/* ----- Shared floating HTML tooltip ----- */
+/* One DOM node reused across charts; follows the cursor and stays within viewport. */
+function ensureChartTooltip() {
+  let tip = document.getElementById('chartTooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'chartTooltip';
+    tip.className = 'chart-tooltip';
+    tip.style.display = 'none';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+function positionChartTooltip(tip, ev) {
+  const pad = 12;
+  const rect = tip.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = ev.clientX + pad;
+  let y = ev.clientY + pad;
+  if (x + rect.width + pad > vw)  x = ev.clientX - rect.width - pad;
+  if (y + rect.height + pad > vh) y = ev.clientY - rect.height - pad;
+  if (x < 4) x = 4;
+  if (y < 4) y = 4;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+function showChartTooltip(html, ev) {
+  const tip = ensureChartTooltip();
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  positionChartTooltip(tip, ev);
+}
+function hideChartTooltip() {
+  const tip = document.getElementById('chartTooltip');
+  if (tip) tip.style.display = 'none';
+}
+/* Build a standard 1-row tooltip: title + colored swatch + value + optional extra. */
+function tipHtml(title, color, valueText, extra) {
+  return (
+    '<div class="title">' + escapeHtml(title) + '</div>' +
+    '<div class="row">' +
+      '<span class="swatch" style="background:' + color + '"></span>' +
+      '<span class="value">' + escapeHtml(valueText) + '</span>' +
+      (extra ? '<span class="label">· ' + escapeHtml(extra) + '</span>' : '') +
+    '</div>'
+  );
+}
+
 function niceTicks(min, max, count) {
   const range = max - min || 1;
   const step = Math.pow(10, Math.floor(Math.log10(range / count)));
@@ -127,12 +175,15 @@ function drawAreaChart(svg, data, getValue, getLabel, opts) {
   // tooltip
   const tipG = svgEl('g', { class: 'svg-tooltip' });
   tipG.style.display = 'none';
-  const tipW = opts.cumulative ? 180 : 130;
+  const tipW = opts.cumulative ? 180 : 140;
   const tipH = opts.cumulative ? 54 : 38;
   const tipRect = svgEl('rect', { width: tipW, height: tipH, fill: 'hsl(var(--card))', stroke: 'hsl(var(--border))', rx: 6 });
   const tipLabel = svgEl('text', { x: 8, y: 14, class: 'label' });
-  const tipValue = svgEl('text', { x: 8, y: 30, 'font-weight': '600', 'font-size': '12' });
-  tipG.appendChild(tipRect); tipG.appendChild(tipLabel); tipG.appendChild(tipValue);
+  // Color swatch matches the line/area colour so users can map the tooltip
+  // back to the series even when several charts share the screen.
+  const tipSwatch = svgEl('rect', { x: 8, y: 22, width: 8, height: 8, rx: 2, fill: 'hsl(var(' + opts.colorVar + '))' });
+  const tipValue = svgEl('text', { x: 22, y: 30, 'font-weight': '600', 'font-size': '12' });
+  tipG.appendChild(tipRect); tipG.appendChild(tipLabel); tipG.appendChild(tipSwatch); tipG.appendChild(tipValue);
   const tipCum = opts.cumulative ? svgEl('text', { x: 8, y: 46, 'font-size': '11', fill: 'hsl(var(--muted-foreground))' }) : null;
   if (tipCum) tipG.appendChild(tipCum);
 
@@ -338,14 +389,24 @@ function drawDonutChart(svg, legendEl, data, getValue, getLabel, valueFmt) {
     const x2 = cx + rOuter * Math.cos(end),   y2 = cy + rOuter * Math.sin(end);
     const x3 = cx + rInner * Math.cos(end),   y3 = cy + rInner * Math.sin(end);
     const x4 = cx + rInner * Math.cos(start), y4 = cy + rInner * Math.sin(start);
-    svg.appendChild(svgEl('path', {
+    const color = colorFor(i);
+    const slicePath = svgEl('path', {
       d:
         'M ' + x1 + ' ' + y1 + ' ' +
         'A ' + rOuter + ' ' + rOuter + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' ' +
         'L ' + x3 + ' ' + y3 + ' ' +
         'A ' + rInner + ' ' + rInner + ' 0 ' + large + ' 0 ' + x4 + ' ' + y4 + ' Z',
-      fill: colorFor(i),
-    }));
+      fill: color,
+      class: 'donut-slice',
+    });
+    const label = getLabel(d);
+    const pct   = ((v / total) * 100).toFixed(1) + '%';
+    const valStr = valueFmt(v);
+    slicePath.addEventListener('mousemove', (ev) => {
+      showChartTooltip(tipHtml(label, color, valStr, pct), ev);
+    });
+    slicePath.addEventListener('mouseleave', hideChartTooltip);
+    svg.appendChild(slicePath);
     start = end;
   });
   const center = svgEl('text', {
@@ -381,19 +442,33 @@ function renderHBars(host, items, getLabel, getValue, valueFmt, opts) {
     host.innerHTML = '<div class="muted" style="font-size:12px;padding:6px 0">No data</div>';
     return;
   }
-  const max = Math.max(1, ...items.map(getValue));
+  const values = items.map(getValue);
+  const max   = Math.max(1, ...values);
+  const total = values.reduce((s, v) => s + (v || 0), 0);
   host.innerHTML = items.map((it, i) => {
-    const v = getValue(it);
+    const v = values[i];
     const pct = (v / max) * 100;
     const c = (opts && opts.colorByIndex) ? colorFor(i) : 'hsl(var(--chart-1))';
     return (
-      '<div class="bar-row">' +
-        '<span class="label-text" title="' + escapeHtml(getLabel(it)) + '">' + escapeHtml(getLabel(it)) + '</span>' +
+      '<div class="bar-row" data-i="' + i + '">' +
+        '<span class="label-text">' + escapeHtml(getLabel(it)) + '</span>' +
         '<span class="track"><span class="fill" style="width:' + pct.toFixed(1) + '%;background:' + c + '"></span></span>' +
         '<span class="val">' + valueFmt(v) + '</span>' +
       '</div>'
     );
   }).join('');
+
+  // Hover tooltip: shows item label, bar colour, value, and share of total.
+  host.querySelectorAll('.bar-row').forEach((row) => {
+    const i = +row.getAttribute('data-i');
+    const it = items[i];
+    const v  = values[i];
+    const c  = (opts && opts.colorByIndex) ? colorFor(i) : 'hsl(var(--chart-1))';
+    const share = total > 0 ? ((v / total) * 100).toFixed(1) + '% of total' : '';
+    const html = tipHtml(getLabel(it), c, valueFmt(v), share);
+    row.addEventListener('mousemove', (ev) => showChartTooltip(html, ev));
+    row.addEventListener('mouseleave', hideChartTooltip);
+  });
 }
 
 /**
@@ -414,6 +489,8 @@ function renderHeatmap(host, data, valueFmt) {
   for (let h = 0; h < 24; h++) {
     cells.push('<div class="col-label">' + (h % 3 === 0 ? h : '') + '</div>');
   }
+  // Index by weekday-hour so the hover handler can look up cost/requests in O(1).
+  const cellMeta = {};
   for (let d = 0; d < 7; d++) {
     cells.push('<div class="row-label">' + dayLabels[d] + '</div>');
     for (let h = 0; h < 24; h++) {
@@ -422,10 +499,25 @@ function renderHeatmap(host, data, valueFmt) {
       const bg = intensity > 0
         ? 'hsl(var(--chart-1) / ' + Math.max(0.08, intensity).toFixed(2) + ')'
         : 'hsl(var(--muted))';
-      const tip = dayLabels[d] + ' ' + h + ':00 — ' + valueFmt(b.cost) + ' · ' + b.requests + ' req';
-      cells.push('<div class="cell" style="background:' + bg + '" title="' + tip + '"></div>');
+      const key = d + '-' + h;
+      cellMeta[key] = { day: dayLabels[d], hour: h, cost: b.cost, requests: b.requests, bg };
+      cells.push('<div class="cell" data-key="' + key + '" style="background:' + bg + '"></div>');
     }
   }
   host.innerHTML = cells.join('');
+
+  host.querySelectorAll('.cell[data-key]').forEach((cell) => {
+    const meta = cellMeta[cell.getAttribute('data-key')];
+    if (!meta) return;
+    const swatch = meta.cost > 0 ? meta.bg : 'hsl(var(--muted))';
+    const html = tipHtml(
+      meta.day + ' ' + String(meta.hour).padStart(2, '0') + ':00',
+      swatch,
+      valueFmt(meta.cost),
+      meta.requests + ' req'
+    );
+    cell.addEventListener('mousemove', (ev) => showChartTooltip(html, ev));
+    cell.addEventListener('mouseleave', hideChartTooltip);
+  });
 }
 `;

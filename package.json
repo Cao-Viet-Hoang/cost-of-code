@@ -4,6 +4,7 @@
   "publisher": "cost-of-code",
   "description": "Local-first dashboard for Claude Code token usage and estimated cost. Collects OpenTelemetry data locally and stores JSONL under ~/.claude/usage-tracker.",
   "version": "0.1.0",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.118.0"
   },
@@ -17,33 +18,33 @@
     "commands": [
       {
         "command": "claudeUsageTracker.openDashboard",
-        "title": "Claude Usage: Open Dashboard",
-        "category": "Claude Usage"
+        "title": "Open Dashboard",
+        "category": "Cost Of Code"
       },
       {
         "command": "claudeUsageTracker.runSetup",
-        "title": "Claude Usage: Run Setup (install collector + autostart)",
-        "category": "Claude Usage"
+        "title": "Run Setup (install collector + autostart)",
+        "category": "Cost Of Code"
       },
       {
         "command": "claudeUsageTracker.uninstall",
-        "title": "Claude Usage: Uninstall Collector",
-        "category": "Claude Usage"
+        "title": "Uninstall Collector",
+        "category": "Cost Of Code"
       },
       {
         "command": "claudeUsageTracker.startCollector",
-        "title": "Claude Usage: Start Collector",
-        "category": "Claude Usage"
+        "title": "Start Collector",
+        "category": "Cost Of Code"
       },
       {
         "command": "claudeUsageTracker.stopCollector",
-        "title": "Claude Usage: Stop Collector",
-        "category": "Claude Usage"
+        "title": "Stop Collector",
+        "category": "Cost Of Code"
       },
       {
         "command": "claudeUsageTracker.showStatus",
-        "title": "Claude Usage: Show Collector Status",
-        "category": "Claude Usage"
+        "title": "Show Collector Status",
+        "category": "Cost Of Code"
       }
     ],
     "configuration": {
@@ -72,10 +73,18 @@
           "additionalProperties": {
             "type": "object",
             "properties": {
-              "input": { "type": "number" },
-              "output": { "type": "number" },
-              "cacheRead": { "type": "number" },
-              "cacheCreate": { "type": "number" }
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "cacheRead": {
+                "type": "number"
+              },
+              "cacheCreate": {
+                "type": "number"
+              }
             }
           }
         }
@@ -86,18 +95,20 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "build-icon": "node scripts/build-icon.js",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.118.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
+    "@types/vscode": "^1.118.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.56.1"
   }
 }
