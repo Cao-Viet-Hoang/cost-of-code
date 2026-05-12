@@ -64,6 +64,20 @@
           "default": 15,
           "minimum": 0,
           "description": "Dashboard auto-refresh interval in seconds. 0 disables auto-refresh."
+        },
+        "claudeUsageTracker.pricing": {
+          "type": "object",
+          "default": {},
+          "description": "Per-model pricing overrides for the cache-savings estimate. Keys are model-name substrings (e.g. \"sonnet\"); values are partial { input, output, cacheRead, cacheCreate } per 1M tokens.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input": { "type": "number" },
+              "output": { "type": "number" },
+              "cacheRead": { "type": "number" },
+              "cacheCreate": { "type": "number" }
+            }
+          }
         }
       }
     }

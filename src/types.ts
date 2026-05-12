@@ -68,6 +68,42 @@ export interface SessionAggregate extends AggregatedTotals {
 export interface ModelAggregate extends AggregatedTotals {
   model: string;
   averageDurationMs: number;
+  p50DurationMs: number;
+  p95DurationMs: number;
+}
+
+export interface WorkspaceAggregate extends AggregatedTotals {
+  workspace: string;
+  sessions: number;
+  models: string[];
+}
+
+export interface SourceAggregate extends AggregatedTotals {
+  source: string;
+}
+
+export interface HourlyBucket {
+  /** 0 = Sunday … 6 = Saturday (local time). */
+  weekday: number;
+  /** 0..23 (local time). */
+  hour: number;
+  cost: number;
+  requests: number;
+  totalTokens: number;
+}
+
+export interface RequestDetail {
+  timestamp: string;
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokensWithCache: number;
+  cost: number;
+  durationMs: number;
+  requestId?: string;
+  querySource?: string;
 }
 
 export interface OverviewSnapshot extends AggregatedTotals {
@@ -87,7 +123,7 @@ export interface HealthReport {
   lastEventAt: string | null;
   lastUsageAt: string | null;
   telemetryEnvConfigured: boolean;
-  scheduledTaskRegistered: boolean | null; // null = unknown (non-Windows)
+  scheduledTaskRegistered: boolean | null;
   hasUsageRecords: boolean;
   totalLogPayloads: number;
   totalUsageRecords: number;
@@ -103,6 +139,16 @@ export interface CacheBreakdownByDay {
   cacheCreationTokens: number;
   totalTokensWithCache: number;
   cacheRatio: number;
+  /** Estimated USD saved by serving cache_read instead of fresh input. */
+  estimatedSavedUsd: number;
+}
+
+export interface CacheSavingsSummary {
+  totalReadTokens: number;
+  totalCreateTokens: number;
+  totalSavedUsd: number;
+  /** Hypothetical cost if every cache_read had been a fresh input. */
+  hypotheticalUncachedCost: number;
 }
 
 export interface FilterOptions {
