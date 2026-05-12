@@ -74,7 +74,7 @@ Write-OK $InstallRoot
 # 3. Copy collector files (including the VBScript launcher that hides the
 # node.exe console window).
 Write-Step "Copying collector from $SourceDir"
-foreach ($f in @('collector.js', 'normalizer.js', 'package.json', 'run-collector.vbs')) {
+foreach ($f in @('collector.js', 'normalizer.js', 'record-session.js', 'package.json', 'run-collector.vbs')) {
   $src = Join-Path $SourceDir $f
   if (-not (Test-Path $src)) {
     throw "Missing source file: $src"
@@ -190,6 +190,52 @@ if (-not $NoEnv) {
     }
     Write-OK "env.$k = $($envVars[$k])"
   }
+
+  # ---- SessionStart hook for workspace capture ----
+  # Claude Code's OTLP payloads do not include the cwd, so we register a hook
+  # that writes session_id+cwd to a side file. The dashboard joins on this.
+  Write-Step 'Registering SessionStart hook to capture workspace'
+
+  $hookJs      = Join-Path $BinDir 'record-session.js'
+  $hookCommand = "node `"$hookJs`""
+
+  if (-not $settings.PSObject.Properties.Match('hooks').Count) {
+    $settings | Add-Member -MemberType NoteProperty -Name 'hooks' -Value (New-Object PSObject)
+  }
+  if ($null -eq $settings.hooks -or $settings.hooks -isnot [psobject]) {
+    $settings.hooks = New-Object PSObject
+  }
+  if (-not $settings.hooks.PSObject.Properties.Match('SessionStart').Count) {
+    # PSCustomObject + an array property: need to add as @() literal
+    $settings.hooks | Add-Member -MemberType NoteProperty -Name 'SessionStart' -Value @()
+  }
+
+  # Look through existing SessionStart entries for one of OUR commands
+  # (matched by the unique 'record-session.js' substring). If found, update
+  # the command path; otherwise append a new entry.
+  $ssArr  = @($settings.hooks.SessionStart)
+  $found  = $false
+  foreach ($entry in $ssArr) {
+    if ($null -ne $entry -and $entry.PSObject.Properties.Match('hooks').Count) {
+      foreach ($h in @($entry.hooks)) {
+        if ($null -ne $h -and $h.PSObject.Properties.Match('command').Count -and
+            $h.command -is [string] -and $h.command -match 'record-session\.js') {
+          $h.command = $hookCommand
+          $found = $true
+        }
+      }
+    }
+  }
+  if (-not $found) {
+    $hObj = New-Object PSObject
+    $hObj | Add-Member -MemberType NoteProperty -Name 'type'    -Value 'command'
+    $hObj | Add-Member -MemberType NoteProperty -Name 'command' -Value $hookCommand
+    $newEntry = New-Object PSObject
+    $newEntry | Add-Member -MemberType NoteProperty -Name 'hooks' -Value @($hObj)
+    $ssArr += $newEntry
+    $settings.hooks.SessionStart = $ssArr
+  }
+  Write-OK "hooks.SessionStart -> $hookCommand"
 
   $json = $settings | ConvertTo-Json -Depth 20
   # WriteAllText with a no-BOM UTF-8 encoder. Windows PowerShell 5.1's

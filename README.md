@@ -92,14 +92,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\uninstall.ps1 -Purge
 
 ```
 ~/.claude/usage-tracker/
-├── bin/                                  # collector.js + normalizer.js (installed)
+├── bin/                                  # collector.js + normalizer.js + record-session.js
 ├── raw/YYYY-MM-DD.otel.jsonl             # raw OTLP payloads (one per line)
 ├── usage/YYYY-MM-DD.usage.jsonl          # normalized usage records (dedup'd)
 ├── logs/YYYY-MM-DD.collector.log         # collector log
 ├── exports/<timestamp>_<label>.{jsonl,csv}
 ├── config/                               # reserved for future user-editable config
+├── session-meta.jsonl                    # session_id -> workspace (from SessionStart hook)
 └── status.json                           # heartbeat (refreshed every ~15s)
 ```
+
+### Workspace attribution
+
+Claude Code's OpenTelemetry payloads do **not** include the working directory,
+so by themselves we cannot tell which repo each request came from. Setup
+registers a Claude Code **`SessionStart` hook** that writes
+`{ session_id, workspace, started_at }` to `session-meta.jsonl` whenever a
+new session begins. The dashboard joins each `api_request` record back to its
+workspace via `session_id` at read time. Sessions that started before the
+hook was installed appear as `<unknown>`.
 
 Privacy: prompt content, tool results, and file contents are **not** captured.
 The normalizer only keeps token counts, model id, request/session ids,

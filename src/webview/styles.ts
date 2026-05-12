@@ -238,14 +238,27 @@ body {
   border-radius: var(--radius);
 }
 .filters {
-  padding: 14px 16px;
+  padding: 12px 14px;
   margin-bottom: 16px;
-  display: flex; flex-wrap: wrap; gap: 12px;
-  align-items: flex-end; justify-content: space-between;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.filters-presets {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
-  flex: 1; min-width: 0;
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.filter-row + .filter-row {
+  padding-top: 10px;
+  border-top: 1px dashed hsl(var(--border));
+}
+.filter-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;   /* push From/To to the right side of row 1 */
 }
 .preset-group {
   display: inline-flex;
@@ -256,18 +269,42 @@ body {
 .preset-group button {
   background: transparent; border: 0;
   border-right: 1px solid hsl(var(--border));
-  height: 32px; padding: 0 10px;
+  height: 30px; padding: 0 12px;
   font-family: inherit; font-size: 12px; font-weight: 500;
   color: hsl(var(--muted-foreground)); cursor: pointer;
 }
 .preset-group button:last-child { border-right: 0; }
 .preset-group button:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
 .preset-group button.active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
-.filter-group {
-  display: flex; gap: 12px; flex-wrap: wrap; flex: 1; min-width: 0;
-  align-items: flex-end;
+
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-.filter-actions { display: flex; gap: 8px; }
+.field-inline.grow {
+  flex: 1; min-width: 200px;
+}
+.field-inline .label {
+  font-size: 10.5px; font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.field-inline .input-with-icon { flex: 1; min-width: 0; }
+.field-inline select,
+.field-inline input[type=date] {
+  min-width: 110px;
+  max-width: 200px;
+}
+.filter-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;   /* push Clear/Apply to the right of row 2 */
+}
+
+/* legacy field used elsewhere (export pageSize selector, etc.) */
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 130px; }
 .field.grow { flex: 1; min-width: 200px; }
 .field > span {

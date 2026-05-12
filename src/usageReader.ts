@@ -95,10 +95,65 @@ interface FileCacheEntry {
 
 export class UsageReader {
   private readonly usageDir: string;
+  private readonly sessionMetaFile: string;
   private readonly fileCache = new Map<string, FileCacheEntry>();
+  /** Cache of session-meta.jsonl: session_id → workspace. */
+  private sessionMetaCache: Map<string, string> | null = null;
+  private sessionMetaMtime = 0;
+  private sessionMetaSize = 0;
 
   constructor(rootOverride?: string) {
-    this.usageDir = getPaths(rootOverride).usage;
+    const p = getPaths(rootOverride);
+    this.usageDir = p.usage;
+    this.sessionMetaFile = p.sessionMeta;
+  }
+
+  /**
+   * Reads ~/.claude/usage-tracker/session-meta.jsonl (written by the
+   * SessionStart hook) and returns a session_id → workspace map.
+   * Cached by (mtime, size) so polling is cheap.
+   */
+  private loadSessionMeta(): Map<string, string> {
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(this.sessionMetaFile);
+    } catch {
+      this.sessionMetaCache = new Map();
+      this.sessionMetaMtime = 0;
+      this.sessionMetaSize = 0;
+      return this.sessionMetaCache;
+    }
+    if (
+      this.sessionMetaCache &&
+      this.sessionMetaMtime === stat.mtimeMs &&
+      this.sessionMetaSize === stat.size
+    ) {
+      return this.sessionMetaCache;
+    }
+    const map = new Map<string, string>();
+    try {
+      const raw = fs.readFileSync(this.sessionMetaFile, 'utf8');
+      for (const line of raw.split(/\r?\n/)) {
+        if (!line) { continue; }
+        try {
+          const j = JSON.parse(line) as { session_id?: string; workspace?: string };
+          if (j.session_id && j.workspace) {
+            // Last-write-wins: a session_id seen multiple times keeps the
+            // most recent workspace (cd'd into a different repo mid-session
+            // is a rare case and we want the latest signal).
+            map.set(j.session_id, j.workspace);
+          }
+        } catch {
+          // skip malformed line
+        }
+      }
+    } catch {
+      // file unreadable — fall through with empty map
+    }
+    this.sessionMetaCache = map;
+    this.sessionMetaMtime = stat.mtimeMs;
+    this.sessionMetaSize = stat.size;
+    return map;
   }
 
   listAvailableDates(): string[] {
@@ -167,6 +222,7 @@ export class UsageReader {
   *iterateRecords(filter: FilterOptions = {}): Generator<UsageRecord> {
     const dates = this.listAvailableDates();
     this.evictMissingFiles(dates);
+    const sessionMeta = this.loadSessionMeta();
     const startD = filter.startDate;
     const endD = filter.endDate;
     const seen = new Set<string>();
@@ -181,8 +237,18 @@ export class UsageReader {
         if (seen.has(key)) { continue; }
         seen.add(key);
 
-        if (!recordPasses(rec, filter)) { continue; }
-        yield rec;
+        // Backfill workspace from the SessionStart-hook side file when the
+        // record itself doesn't carry one (Claude Code's OTLP currently does
+        // not include cwd). Filtering by workspace happens AFTER backfill so
+        // the workspace dropdown actually works.
+        let effective = rec;
+        if (!rec.workspace && rec.session_id) {
+          const ws = sessionMeta.get(rec.session_id);
+          if (ws) { effective = { ...rec, workspace: ws }; }
+        }
+
+        if (!recordPasses(effective, filter)) { continue; }
+        yield effective;
       }
     }
   }
@@ -440,6 +506,11 @@ export class UsageReader {
     for (const r of this.iterateRecords()) {
       const v = r[field];
       if (v) { set.add(v); }
+    }
+    if (field === 'workspace') {
+      // Also union in any workspaces we know from the SessionStart hook,
+      // even if their session_id hasn't produced an api_request yet.
+      for (const ws of this.loadSessionMeta().values()) { set.add(ws); }
     }
     return Array.from(set).sort();
   }

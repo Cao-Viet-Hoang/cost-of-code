@@ -87,12 +87,46 @@ if (-not $KeepEnv) {
           $settings.PSObject.Properties.Remove('env')
           Write-OK 'Removed empty env block'
         }
-        $json = $settings | ConvertTo-Json -Depth 20
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
       } else {
         Write-OK 'settings.json has no env block - nothing to clean'
       }
+
+      # Also strip out our SessionStart hook entry (matched by the
+      # 'record-session.js' command substring). Other hooks the user added
+      # are preserved.
+      if ($settings -and $settings.PSObject.Properties.Match('hooks').Count -and
+          $settings.hooks -is [psobject] -and
+          $settings.hooks.PSObject.Properties.Match('SessionStart').Count) {
+        $kept = @()
+        foreach ($entry in @($settings.hooks.SessionStart)) {
+          $mine = $false
+          if ($null -ne $entry -and $entry.PSObject.Properties.Match('hooks').Count) {
+            foreach ($h in @($entry.hooks)) {
+              if ($null -ne $h -and $h.PSObject.Properties.Match('command').Count -and
+                  $h.command -is [string] -and $h.command -match 'record-session\.js') {
+                $mine = $true; break
+              }
+            }
+          }
+          if (-not $mine) { $kept += $entry }
+        }
+        if ($kept.Count -ne (@($settings.hooks.SessionStart)).Count) {
+          Write-OK 'Removed SessionStart workspace hook'
+        }
+        if ($kept.Count -eq 0) {
+          $settings.hooks.PSObject.Properties.Remove('SessionStart')
+        } else {
+          $settings.hooks.SessionStart = $kept
+        }
+        if ($settings.hooks.PSObject.Properties.Count -eq 0) {
+          $settings.PSObject.Properties.Remove('hooks')
+          Write-OK 'Removed empty hooks block'
+        }
+      }
+
+      $json = $settings | ConvertTo-Json -Depth 20
+      $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+      [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
     } catch {
       Write-Warn2 "Could not parse $settingsPath; leaving it unchanged. ($_)"
     }

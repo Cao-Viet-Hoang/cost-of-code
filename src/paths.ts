@@ -10,6 +10,7 @@ export interface TrackerPaths {
   exports: string;
   bin: string;
   status: string;
+  sessionMeta: string;
 }
 
 export function getPaths(rootOverride?: string): TrackerPaths {
@@ -26,6 +27,7 @@ export function getPaths(rootOverride?: string): TrackerPaths {
     exports: path.join(root, 'exports'),
     bin: path.join(root, 'bin'),
     status: path.join(root, 'status.json'),
+    sessionMeta: path.join(root, 'session-meta.jsonl'),
   };
 }
 

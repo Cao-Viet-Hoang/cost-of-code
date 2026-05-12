@@ -45,7 +45,7 @@ export function buildBodyHtml(): string {
   </nav>
 
   <section class="filters card-surface" id="filters">
-    <div class="filters-presets">
+    <div class="filter-row">
       <div class="preset-group" role="tablist" aria-label="Date presets">
         <button data-preset="today">Today</button>
         <button data-preset="7d" class="active">7d</button>
@@ -54,24 +54,26 @@ export function buildBodyHtml(): string {
         <button data-preset="all">All</button>
         <button data-preset="custom">Custom</button>
       </div>
-      <div class="filter-group">
-        <label class="field"><span>From</span><input type="date" id="filterStart" /></label>
-        <label class="field"><span>To</span><input type="date" id="filterEnd" /></label>
-        <label class="field"><span>Model</span><select id="filterModel"><option value="">All models</option></select></label>
-        <label class="field"><span>Source</span><select id="filterSource"><option value="">All sources</option></select></label>
-        <label class="field"><span>Workspace</span><select id="filterWorkspace"><option value="">All workspaces</option></select></label>
-        <label class="field grow">
-          <span>Search</span>
-          <div class="input-with-icon">
-            ${ICONS.search}
-            <input type="search" id="filterSearch" placeholder="Session id, request id, model…" />
-          </div>
-        </label>
+      <div class="filter-dates">
+        <label class="field-inline"><span class="label">From</span><input type="date" id="filterStart" /></label>
+        <label class="field-inline"><span class="label">To</span><input type="date" id="filterEnd" /></label>
       </div>
     </div>
-    <div class="filter-actions">
-      <button class="btn btn-ghost" id="clearFilter">Clear</button>
-      <button class="btn btn-primary" id="applyFilter">Apply</button>
+
+    <div class="filter-row">
+      <label class="field-inline"><span class="label">Model</span><select id="filterModel"><option value="">All</option></select></label>
+      <label class="field-inline"><span class="label">Source</span><select id="filterSource"><option value="">All</option></select></label>
+      <label class="field-inline"><span class="label">Workspace</span><select id="filterWorkspace"><option value="">All</option></select></label>
+      <label class="field-inline grow">
+        <div class="input-with-icon">
+          ${ICONS.search}
+          <input type="search" id="filterSearch" placeholder="Session id, request id, model…" />
+        </div>
+      </label>
+      <div class="filter-actions">
+        <button class="btn btn-ghost" id="clearFilter">Clear</button>
+        <button class="btn btn-primary" id="applyFilter">Apply</button>
+      </div>
     </div>
   </section>
 
