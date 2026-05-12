@@ -746,7 +746,10 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 
 /* ============================== SVG TOOLTIP ============================== */
 .svg-tooltip { pointer-events: none; }
-.svg-tooltip rect { fill: hsl(var(--card)); stroke: hsl(var(--border)); rx: 6; }
+/* Only the background rect gets the card styling — scoping by class prevents
+   this rule from clobbering per-series swatch rects (which set their own fill
+   via the SVG attribute and would otherwise lose to this selector). */
+.svg-tooltip .tip-bg { fill: hsl(var(--card)); stroke: hsl(var(--border)); rx: 6; }
 .svg-tooltip text { fill: hsl(var(--foreground)); }
 .svg-tooltip .label { fill: hsl(var(--muted-foreground)); font-size: 10px; }
 

@@ -177,14 +177,18 @@ function drawAreaChart(svg, data, getValue, getLabel, opts) {
   tipG.style.display = 'none';
   const tipW = opts.cumulative ? 180 : 140;
   const tipH = opts.cumulative ? 54 : 38;
-  const tipRect = svgEl('rect', { width: tipW, height: tipH, fill: 'hsl(var(--card))', stroke: 'hsl(var(--border))', rx: 6 });
+  const tipRect = svgEl('rect', { width: tipW, height: tipH, class: 'tip-bg' });
   const tipLabel = svgEl('text', { x: 8, y: 14, class: 'label' });
   // Color swatch matches the line/area colour so users can map the tooltip
   // back to the series even when several charts share the screen.
   const tipSwatch = svgEl('rect', { x: 8, y: 22, width: 8, height: 8, rx: 2, fill: 'hsl(var(' + opts.colorVar + '))' });
   const tipValue = svgEl('text', { x: 22, y: 30, 'font-weight': '600', 'font-size': '12' });
   tipG.appendChild(tipRect); tipG.appendChild(tipLabel); tipG.appendChild(tipSwatch); tipG.appendChild(tipValue);
-  const tipCum = opts.cumulative ? svgEl('text', { x: 8, y: 46, 'font-size': '11', fill: 'hsl(var(--muted-foreground))' }) : null;
+  // Cumulative row: mirror the series-row layout (swatch + text) so the user
+  // can tell which colour is which. --chart-3 matches the .cumulative line in styles.
+  const tipCumSwatch = opts.cumulative ? svgEl('rect', { x: 8, y: 38, width: 8, height: 8, rx: 2, fill: 'hsl(var(--chart-3))' }) : null;
+  const tipCum = opts.cumulative ? svgEl('text', { x: 22, y: 46, 'font-size': '11', fill: 'hsl(var(--muted-foreground))' }) : null;
+  if (tipCumSwatch) tipG.appendChild(tipCumSwatch);
   if (tipCum) tipG.appendChild(tipCum);
 
   data.forEach((d, i) => {
@@ -316,7 +320,7 @@ function drawStackedBars(svg, data, series, getLabel, opts) {
   const tipG = svgEl('g', { class: 'svg-tooltip' });
   tipG.style.display = 'none';
   const tipH = 18 + series.length * 14;
-  const tipRect = svgEl('rect', { width: 180, height: tipH, fill: 'hsl(var(--card))', stroke: 'hsl(var(--border))', rx: 6 });
+  const tipRect = svgEl('rect', { width: 180, height: tipH, class: 'tip-bg' });
   const tipTitle = svgEl('text', { x: 8, y: 14, 'font-weight': '600', 'font-size': '11' });
   tipG.appendChild(tipRect); tipG.appendChild(tipTitle);
   const tipLines = series.map((s, i) => {
@@ -509,7 +513,14 @@ function renderHeatmap(host, data, valueFmt) {
   host.querySelectorAll('.cell[data-key]').forEach((cell) => {
     const meta = cellMeta[cell.getAttribute('data-key')];
     if (!meta) return;
-    const swatch = meta.cost > 0 ? meta.bg : 'hsl(var(--muted))';
+    // Swatch reflects intensity but stays visible: floor alpha so even faint
+    // cells produce a clearly tinted dot (the unblended cell color would be
+    // nearly invisible at alpha 0.08).
+    const intensity = max > 0 ? meta.cost / max : 0;
+    const alpha = meta.cost > 0 ? Math.max(0.55, intensity).toFixed(2) : 0;
+    const swatch = meta.cost > 0
+      ? 'hsl(var(--chart-1) / ' + alpha + ')'
+      : 'hsl(var(--muted))';
     const html = tipHtml(
       meta.day + ' ' + String(meta.hour).padStart(2, '0') + ':00',
       swatch,

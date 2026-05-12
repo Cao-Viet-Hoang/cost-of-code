@@ -39,6 +39,7 @@ export class DashboardPanel {
         localResourceRoots: [extensionUri],
       },
     );
+    panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'icon.png');
     DashboardPanel.current = new DashboardPanel(panel, extensionUri);
   }
 

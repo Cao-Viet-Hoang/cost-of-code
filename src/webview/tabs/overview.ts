@@ -206,7 +206,7 @@ function renderOverview(d) {
     w => shortenWorkspace(w.workspace),
     w => w.cost,
     fmtCostShort,
-    { colorByIndex: false },
+    { colorByIndex: true },
   );
 
   // Recent sessions

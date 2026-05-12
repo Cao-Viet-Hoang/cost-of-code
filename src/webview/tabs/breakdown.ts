@@ -174,7 +174,7 @@ function renderWorkspacesSubtab(d) {
   '</tr>';
 
   renderHBars(document.getElementById('workspacesBars'), ws.slice(0, 10),
-    w => shortenWorkspace(w.workspace), w => w.cost, fmtCostShort, { colorByIndex: false });
+    w => shortenWorkspace(w.workspace), w => w.cost, fmtCostShort, { colorByIndex: true });
 
   if (ws.length === 0) {
     empty.hidden = false; tbody.innerHTML = '';
