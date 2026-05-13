@@ -34,18 +34,22 @@ cost-of-code/
 
 ## Quick start (Windows)
 
-1. Compile and load the extension in VSCode:
+1. Run the new joiner setup script:
 
-   ```powershell
-   npm install
-   npm run compile
-   # Press F5 inside VSCode to launch the Extension Development Host.
+   ```bat
+   setup.bat
    ```
 
-2. From the new VSCode window, run **`Claude Usage: Open Dashboard`**
+   It installs npm dependencies and compiles the extension once.
+
+2. Load the extension in VSCode:
+
+   Press F5 inside VSCode to launch the Extension Development Host.
+
+3. From the new VSCode window, run **`Claude Usage: Open Dashboard`**
    (or `Claude Usage: Run Setup`).
 
-3. Setup runs hidden in the background and reports completion via a
+4. Setup runs hidden in the background and reports completion via a
    notification. It will:
    - Copy `collector.js` and `normalizer.js` to `%USERPROFILE%\.claude\usage-tracker\bin`.
    - Register a Scheduled Task **`ClaudeCodeUsageTracker`** that runs at logon.
@@ -67,7 +71,7 @@ cost-of-code/
      ```
    - Start the collector immediately.
 
-4. Run Claude Code as usual (CLI or in VSCode). Claude Code reads
+5. Run Claude Code as usual (CLI or in VSCode). Claude Code reads
    `~/.claude/settings.json` at startup and exports telemetry to the local
    collector — **no terminal restart needed**. If a Claude Code session was
    already running, restart that session.

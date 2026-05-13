@@ -113,6 +113,38 @@ export interface OverviewSnapshot extends AggregatedTotals {
   collectorStatus: CollectorStatus | null;
 }
 
+export interface ScheduledTaskDetail {
+  registered: boolean;
+  state: string | null;
+  lastRunTime: string | null;
+  lastTaskResult: number | null;
+  nextRunTime: string | null;
+}
+
+export interface TelemetryEnvEntry {
+  name: string;
+  value: string | null;
+}
+
+export interface StatusDetail {
+  endpoint: string;
+  scheduledTask: ScheduledTaskDetail | null;
+  collectorHttp: {
+    responded: boolean;
+    status: CollectorStatus | null;
+  };
+  statusFile: {
+    path: string;
+    exists: boolean;
+    status: CollectorStatus | null;
+  };
+  telemetryEnv: {
+    settingsPath: string;
+    settingsExists: boolean;
+    entries: TelemetryEnvEntry[];
+  };
+}
+
 export interface HealthReport {
   collectorRunning: boolean;
   collectorRespondedHttp: boolean;

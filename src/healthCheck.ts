@@ -6,7 +6,13 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getPaths } from './paths';
 import { UsageReader } from './usageReader';
-import type { CollectorStatus, HealthReport } from './types';
+import type {
+  CollectorStatus,
+  HealthReport,
+  ScheduledTaskDetail,
+  StatusDetail,
+  TelemetryEnvEntry,
+} from './types';
 
 const execFileP = promisify(execFile);
 const TASK_NAME = 'ClaudeCodeUsageTracker';
@@ -90,6 +96,82 @@ export class HealthCheckService {
       }
       return false;
     }
+  }
+
+  async scheduledTaskDetail(): Promise<ScheduledTaskDetail | null> {
+    if (process.platform !== 'win32') { return null; }
+    // Use PowerShell to query Get-ScheduledTask + Get-ScheduledTaskInfo and
+    // emit JSON. Falls back to "not registered" if the cmdlet errors.
+    const cmd =
+      "$ErrorActionPreference='SilentlyContinue';" +
+      `$t = Get-ScheduledTask -TaskName '${TASK_NAME}';` +
+      'if (-not $t) { \'{"registered":false}\' | Write-Output; return };' +
+      `$i = Get-ScheduledTaskInfo -TaskName '${TASK_NAME}';` +
+      '$o = [ordered]@{' +
+      ' registered=$true;' +
+      ' state=$t.State.ToString();' +
+      ' lastRunTime= if ($i.LastRunTime) { $i.LastRunTime.ToString(\'o\') } else { $null };' +
+      ' lastTaskResult=$i.LastTaskResult;' +
+      ' nextRunTime= if ($i.NextRunTime) { $i.NextRunTime.ToString(\'o\') } else { $null }' +
+      '};' +
+      '$o | ConvertTo-Json -Compress';
+    try {
+      const { stdout } = await execFileP(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', cmd],
+        { windowsHide: true },
+      );
+      const text = stdout.trim();
+      if (!text) {
+        return { registered: false, state: null, lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+      }
+      const parsed = JSON.parse(text) as Partial<ScheduledTaskDetail>;
+      return {
+        registered: !!parsed.registered,
+        state: parsed.state ?? null,
+        lastRunTime: parsed.lastRunTime ?? null,
+        lastTaskResult: typeof parsed.lastTaskResult === 'number' ? parsed.lastTaskResult : null,
+        nextRunTime: parsed.nextRunTime ?? null,
+      };
+    } catch {
+      return { registered: false, state: null, lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+    }
+  }
+
+  telemetryEnvEntries(): { settingsPath: string; settingsExists: boolean; entries: TelemetryEnvEntry[] } {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const settings = readClaudeSettings();
+    const settingsExists = fs.existsSync(settingsPath);
+    const names = [
+      'CLAUDE_CODE_ENABLE_TELEMETRY',
+      'OTEL_LOGS_EXPORTER',
+      'OTEL_METRICS_EXPORTER',
+      'OTEL_TRACES_EXPORTER',
+      'OTEL_EXPORTER_OTLP_PROTOCOL',
+      'OTEL_EXPORTER_OTLP_ENDPOINT',
+    ];
+    const env = (settings?.env ?? {}) as Record<string, unknown>;
+    const entries: TelemetryEnvEntry[] = names.map((name) => {
+      const raw = env[name];
+      return { name, value: raw === undefined || raw === null ? null : String(raw) };
+    });
+    return { settingsPath, settingsExists, entries };
+  }
+
+  async gatherStatusDetail(): Promise<StatusDetail> {
+    const paths = getPaths(this.rootOverride);
+    const [taskDetail, httpStatus, fileStatus] = await Promise.all([
+      this.scheduledTaskDetail(),
+      this.pingCollector(),
+      this.readStatusFile(),
+    ]);
+    return {
+      endpoint: this.endpoint,
+      scheduledTask: taskDetail,
+      collectorHttp: { responded: httpStatus !== null, status: httpStatus },
+      statusFile: { path: paths.status, exists: fs.existsSync(paths.status), status: fileStatus },
+      telemetryEnv: this.telemetryEnvEntries(),
+    };
   }
 
   telemetryEnvConfigured(): boolean {

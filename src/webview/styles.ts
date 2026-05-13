@@ -743,6 +743,18 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .modal h3 { margin: 0 0 8px; font-size: 15px; }
 .modal p  { margin: 0 0 16px; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
 .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal.modal-wide { max-width: 640px; }
+.status-detail { max-height: 60vh; overflow-y: auto; margin-bottom: 16px; }
+.status-section { margin-bottom: 14px; }
+.status-section:last-child { margin-bottom: 0; }
+.status-section h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--muted-foreground));
+}
 
 /* ============================== SVG TOOLTIP ============================== */
 .svg-tooltip { pointer-events: none; }

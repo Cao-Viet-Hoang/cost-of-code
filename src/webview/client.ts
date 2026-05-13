@@ -123,6 +123,8 @@ window.addEventListener('message', (event) => {
   } else if (msg.type === 'sessionDetail') {
     requestCache[msg.payload.sessionId] = msg.payload.requests;
     if (lastData) render(lastData);
+  } else if (msg.type === 'statusDetail') {
+    renderStatusDetail(msg.payload);
   } else if (msg.type === 'error') {
     showToast(msg.payload.message);
   }

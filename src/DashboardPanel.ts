@@ -4,7 +4,7 @@ import { HealthCheckService } from './healthCheck';
 import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
-  runInstall, runUninstall, runStatus, runStartTask, runStopTask, isWindows,
+  runInstall, runUninstall, runStartTask, runStopTask, isWindows,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -101,9 +101,11 @@ export class DashboardPanel {
           await runUninstall(this.extensionUri);
           await this.refresh();
           return;
-        case 'runStatus':
-          await runStatus(this.extensionUri);
+        case 'runStatus': {
+          const detail = await this.health.gatherStatusDetail();
+          this.panel.webview.postMessage({ type: 'statusDetail', payload: detail });
           return;
+        }
         case 'startCollector':
           if (isWindows()) {
             await runStartTask();
