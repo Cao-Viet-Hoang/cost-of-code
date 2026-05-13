@@ -59,7 +59,7 @@ export const HEALTH_HTML = `
 
   <div class="modal-bg" id="setupModal">
     <div class="modal">
-      <h3>Setup Claude Usage Tracker</h3>
+      <h3>Setup Cost of Code</h3>
       <p>Installs the local OTLP collector and registers it to autostart at logon.</p>
 
       <div id="setupStatusBox" class="setup-status" hidden></div>

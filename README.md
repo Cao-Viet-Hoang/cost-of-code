@@ -1,9 +1,9 @@
-# Claude Code Usage Tracker
+# Cost of Code
 
-Local-first dashboard for Claude Code token usage and estimated cost. Receives
-Claude Code OpenTelemetry events on `localhost`, writes them to JSONL under
-`~/.claude/usage-tracker/`, and renders a VSCode dashboard with views for
-Overview, Daily, Sessions, Models, Cache, and Health.
+Cost of Code is a local-first dashboard for Claude Code usage, tokens, and
+estimated cost. It receives Claude Code OpenTelemetry events on `localhost`,
+writes them to JSONL under `~/.claude/usage-tracker/`, and renders a VSCode
+dashboard with views for Overview, Daily, Sessions, Models, Cache, and Health.
 
 No cloud, no account, no remote server. Privacy-safe by default.
 
@@ -51,8 +51,8 @@ Prerequisite: Node.js 20+ and npm.
 
    Press F5 inside VSCode to launch the Extension Development Host.
 
-3. From the new VSCode window, run **`Claude Usage: Open Dashboard`**
-   (or `Claude Usage: Run Setup`).
+3. From the new VSCode window, run **`Cost of Code: Open Dashboard`**
+   (or `Cost of Code: Run Setup`).
 
 ### macOS / Linux
 
@@ -66,7 +66,7 @@ Development Host.
 
 ## Collector Setup
 
-From the Extension Development Host, run **`Claude Usage: Run Setup`**.
+From the Extension Development Host, run **`Cost of Code: Run Setup`**.
 
 Setup runs hidden in the background and reports completion via a notification.
 It will:
@@ -181,13 +181,13 @@ Claude Code itself and is **not** authoritative billing.
 
 ## Commands
 
-- `Claude Usage: Open Dashboard`
-- `Claude Usage: Run Setup (install collector + autostart)`
-- `Claude Usage: Start Collector`
-- `Claude Usage: Stop Collector`
-- `Claude Usage: Show Collector Status`
-- `Claude Usage: Uninstall Collector`
-- `Claude Usage: Import Historical Usage (from ~/.claude/projects)`
+- `Cost of Code: Open Dashboard`
+- `Cost of Code: Run Setup (install collector + autostart)`
+- `Cost of Code: Start Collector`
+- `Cost of Code: Stop Collector`
+- `Cost of Code: Show Collector Status`
+- `Cost of Code: Uninstall Collector`
+- `Cost of Code: Import Historical Usage (from ~/.claude/projects)`
 
 ---
 

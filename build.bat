@@ -14,7 +14,7 @@ if /i "%~1"=="--skip-install" set "SKIP_INSTALL=1"
 
 echo.
 echo ==============================================
-echo   Building Claude Code Usage Tracker (.vsix)
+echo   Building Cost of Code (.vsix)
 echo ==============================================
 echo.
 

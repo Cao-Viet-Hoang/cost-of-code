@@ -4,7 +4,7 @@ export const OVERVIEW_HTML = `
 <section class="panel active" data-panel="overview">
   <div class="first-run" id="firstRun" hidden>
     <div class="empty-icon">${ICONS.activity}</div>
-    <h3>Welcome to Claude Code Usage</h3>
+    <h3>Welcome to Cost of Code</h3>
     <p>No usage data yet. Let's get the local collector running.</p>
     <ol>
       <li>Click <strong>Run setup</strong> below — registers a scheduled task that starts the OTLP collector on logon and configures Claude Code's telemetry env vars.</li>

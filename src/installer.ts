@@ -9,7 +9,7 @@ let outputChannel: vscode.OutputChannel | undefined;
 
 function getChannel(): vscode.OutputChannel {
   if (!outputChannel) {
-    outputChannel = vscode.window.createOutputChannel('Claude Usage Tracker');
+    outputChannel = vscode.window.createOutputChannel('Cost of Code');
   }
   return outputChannel;
 }
@@ -97,11 +97,11 @@ function runBashHidden(opts: RunOptions): Promise<number> {
 export async function runInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const ps = scriptPath(extensionUri, 'install.ps1');
   return runPowerShellHidden({
-    title: 'Claude Usage Tracker — Setup',
+    title: 'Cost of Code — Setup',
     args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps, '-Port', String(port)],
     withProgress: true,
     successMessage:
-      'Claude Usage Tracker installed. Collector is running and will autostart at logon. ' +
+      'Cost of Code installed. Collector is running and will autostart at logon. ' +
       'OpenTelemetry settings were written to ~/.claude/settings.json — restart any active Claude Code session to pick them up.',
     failureMessage: 'Setup failed. See output for details.',
     successActions: [
@@ -124,12 +124,12 @@ export async function runUninstall(extensionUri: vscode.Uri, purge = false): Pro
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps];
   if (purge) { args.push('-PurgeData'); }
   return runPowerShellHidden({
-    title: 'Claude Usage Tracker — Uninstall',
+    title: 'Cost of Code — Uninstall',
     args,
     withProgress: true,
     successMessage: purge
-      ? 'Claude Usage Tracker uninstalled and data deleted.'
-      : 'Claude Usage Tracker uninstalled. Data preserved at ~/.claude/usage-tracker.',
+      ? 'Cost of Code uninstalled and data deleted.'
+      : 'Cost of Code uninstalled. Data preserved at ~/.claude/usage-tracker.',
     failureMessage: 'Uninstall failed. See output for details.',
   });
 }
@@ -137,7 +137,7 @@ export async function runUninstall(extensionUri: vscode.Uri, purge = false): Pro
 export async function runStatus(extensionUri: vscode.Uri): Promise<number> {
   const ps = scriptPath(extensionUri, 'status.ps1');
   return runPowerShellHidden({
-    title: 'Claude Usage Tracker — Status',
+    title: 'Cost of Code — Status',
     args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps],
     revealOnSuccess: true,
   });
@@ -145,7 +145,7 @@ export async function runStatus(extensionUri: vscode.Uri): Promise<number> {
 
 export async function runStartTask(): Promise<number> {
   return runPowerShellHidden({
-    title: 'Claude Usage Tracker — Start',
+    title: 'Cost of Code — Start',
     args: ['-NoProfile', '-Command', 'Start-ScheduledTask -TaskName ClaudeCodeUsageTracker'],
     successMessage: 'Collector started.',
     failureMessage: 'Could not start collector. Run Setup first?',
@@ -162,7 +162,7 @@ const STOP_COMMAND =
 
 export async function runStopTask(): Promise<number> {
   return runPowerShellHidden({
-    title: 'Claude Usage Tracker — Stop',
+    title: 'Cost of Code — Stop',
     args: ['-NoProfile', '-Command', STOP_COMMAND],
     successMessage: 'Collector stopped.',
     failureMessage: 'Could not stop collector.',
@@ -177,11 +177,11 @@ export async function runLinuxInstall(extensionUri: vscode.Uri, port = 4318): Pr
   const sh = scriptPath(extensionUri, 'install.sh');
   const sourceDir = vscode.Uri.joinPath(extensionUri, 'collector').fsPath;
   return runBashHidden({
-    title: 'Claude Usage Tracker — Setup',
+    title: 'Cost of Code — Setup',
     args: [sh, '--port', String(port), '--source-dir', sourceDir],
     withProgress: true,
     successMessage:
-      'Claude Usage Tracker installed. Collector is running and will autostart at login. ' +
+      'Cost of Code installed. Collector is running and will autostart at login. ' +
       'OpenTelemetry settings were written to ~/.claude/settings.json — restart any active Claude Code session to pick them up.',
     failureMessage: 'Setup failed. See output for details.',
     successActions: [
@@ -204,12 +204,12 @@ export async function runLinuxUninstall(extensionUri: vscode.Uri, purge = false)
   const args = [sh];
   if (purge) { args.push('--purge-data'); }
   return runBashHidden({
-    title: 'Claude Usage Tracker — Uninstall',
+    title: 'Cost of Code — Uninstall',
     args,
     withProgress: true,
     successMessage: purge
-      ? 'Claude Usage Tracker uninstalled and data deleted.'
-      : 'Claude Usage Tracker uninstalled. Data preserved at ~/.claude/usage-tracker.',
+      ? 'Cost of Code uninstalled and data deleted.'
+      : 'Cost of Code uninstalled. Data preserved at ~/.claude/usage-tracker.',
     failureMessage: 'Uninstall failed. See output for details.',
   });
 }
@@ -217,7 +217,7 @@ export async function runLinuxUninstall(extensionUri: vscode.Uri, purge = false)
 export async function runLinuxStatus(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const sh = scriptPath(extensionUri, 'status.sh');
   return runBashHidden({
-    title: 'Claude Usage Tracker — Status',
+    title: 'Cost of Code — Status',
     args: [sh, '--port', String(port)],
     revealOnSuccess: true,
   });
@@ -238,7 +238,7 @@ export async function runLinuxStart(): Promise<number> {
     `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
     `fi`;
   return runBashHidden({
-    title: 'Claude Usage Tracker — Start',
+    title: 'Cost of Code — Start',
     args: ['-c', script],
     successMessage: 'Collector started.',
     failureMessage: 'Could not start collector. Run Setup first?',
@@ -250,7 +250,7 @@ export async function runLinuxStop(): Promise<number> {
     `systemctl --user stop ${LINUX_SERVICE_NAME} 2>/dev/null || true\n` +
     `pkill -f 'usage-tracker/bin/collector\\.js' 2>/dev/null && echo "Stopped collector process(es)" || echo "No collector process was running"`;
   return runBashHidden({
-    title: 'Claude Usage Tracker — Stop',
+    title: 'Cost of Code — Stop',
     args: ['-c', script],
     successMessage: 'Collector stopped.',
     failureMessage: 'Could not stop collector.',
@@ -268,8 +268,8 @@ export async function runImportHistorical(
   const channel = getChannel();
   const js = scriptPath(extensionUri, 'import-projects-history.js');
   const title = opts.dryRun
-    ? 'Claude Usage Tracker — Import historical (dry run)'
-    : 'Claude Usage Tracker — Import historical';
+    ? 'Cost of Code — Import historical (dry run)'
+    : 'Cost of Code — Import historical';
   const args = [js];
   if (opts.dryRun) { args.push('--dry-run'); }
 
@@ -381,7 +381,7 @@ export async function checkPort(port: number): Promise<PortCheckResult> {
       return {
         port,
         status: 'in-use-by-tracker',
-        message: `Port ${port} is in use by the current Claude Usage Tracker collector. Setup will restart it.`,
+        message: `Port ${port} is in use by the current Cost of Code collector. Setup will restart it.`,
       };
     }
     return {

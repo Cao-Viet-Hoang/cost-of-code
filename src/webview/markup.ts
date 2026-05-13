@@ -15,8 +15,8 @@ export function buildBodyHtml(): string {
       <div class="brand">
         <div class="brand-icon" aria-hidden="true">${ICONS.trend}</div>
         <div class="brand-text">
-          <h1>Claude Code Usage</h1>
-          <p>Local-first dashboard for tokens, cost &amp; sessions</p>
+          <h1>Cost of Code</h1>
+          <p>Claude Code usage, tokens, and estimated cost</p>
         </div>
       </div>
     </div>

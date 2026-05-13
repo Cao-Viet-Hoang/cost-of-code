@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code Usage Tracker — Linux status reporter
+# Cost of Code — Linux status reporter
 
 PORT=4318
 while [[ $# -gt 0 ]]; do

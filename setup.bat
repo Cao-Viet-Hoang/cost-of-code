@@ -17,7 +17,7 @@ if /i "%~1"=="--no-pause" set "NO_PAUSE=1"
 
 echo.
 echo ==============================================
-echo   Cost Of Code - New Joiner Setup
+echo   Cost of Code - New Joiner Setup
 echo ==============================================
 echo.
 
