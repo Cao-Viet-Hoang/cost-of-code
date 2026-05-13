@@ -447,11 +447,11 @@ function renderHBars(host, items, getLabel, getValue, valueFmt, opts) {
     return;
   }
   const values = items.map(getValue);
-  const max   = Math.max(1, ...values);
   const total = values.reduce((s, v) => s + (v || 0), 0);
-  host.innerHTML = items.map((it, i) => {
+  const denom = total > 0 ? total : Math.max(1, ...values);
+  host.innerHTML = '<div class="bar-list">' + items.map((it, i) => {
     const v = values[i];
-    const pct = (v / max) * 100;
+    const pct = (v / denom) * 100;
     const c = (opts && opts.colorByIndex) ? colorFor(i) : 'hsl(var(--chart-1))';
     return (
       '<div class="bar-row" data-i="' + i + '">' +
@@ -460,7 +460,7 @@ function renderHBars(host, items, getLabel, getValue, valueFmt, opts) {
         '<span class="val">' + valueFmt(v) + '</span>' +
       '</div>'
     );
-  }).join('');
+  }).join('') + '</div>';
 
   // Hover tooltip: shows item label, bar colour, value, and share of total.
   host.querySelectorAll('.bar-row').forEach((row) => {

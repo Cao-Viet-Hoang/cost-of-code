@@ -530,11 +530,19 @@ input:focus, select:focus { outline: none; border-color: hsl(var(--ring)); box-s
   border: 1px solid hsl(var(--border));
 }
 
-.bar-row {
-  display: grid; grid-template-columns: minmax(120px, 1fr) 2fr auto;
-  align-items: center; gap: 12px;
-  padding: 6px 0;
+.bar-list {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr auto;
+  align-items: center;
+  column-gap: 12px;
   font-size: 12.5px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 6px 0;
 }
 .bar-row .label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .bar-row .track {
