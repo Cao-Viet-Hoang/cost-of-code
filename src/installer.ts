@@ -1,0 +1,313 @@
+import * as path from 'path';
+import * as cp from 'child_process';
+import * as http from 'http';
+import * as net from 'net';
+import * as vscode from 'vscode';
+
+// PowerShell script runner. Runs hidden (no terminal flicker) and streams
+// stdout/stderr into a shared Output channel. Shows a single notification on
+// completion: success → info toast; failure → error toast with "Show output".
+//
+// `runStatus` always reveals the output channel because its purpose is to
+// show information.
+
+let outputChannel: vscode.OutputChannel | undefined;
+
+function getChannel(): vscode.OutputChannel {
+  if (!outputChannel) {
+    outputChannel = vscode.window.createOutputChannel('Claude Usage Tracker');
+  }
+  return outputChannel;
+}
+
+function scriptPath(extensionUri: vscode.Uri, name: string): string {
+  return vscode.Uri.joinPath(extensionUri, 'scripts', name).fsPath;
+}
+
+interface RunOptions {
+  title: string;
+  args: string[];
+  withProgress?: boolean;
+  // If true, reveal the Output channel even on success (e.g. status command).
+  revealOnSuccess?: boolean;
+  // Friendlier notification messages (success / failure).
+  successMessage?: string;
+  failureMessage?: string;
+  // Optional buttons for the success notification.
+  successActions?: Array<{ title: string; run: () => void | Promise<void> }>;
+}
+
+async function runPowerShellHidden(opts: RunOptions): Promise<number> {
+  const channel = getChannel();
+  channel.appendLine('');
+  channel.appendLine(`=== ${opts.title} @ ${new Date().toISOString()} ===`);
+  channel.appendLine(`> powershell ${opts.args.join(' ')}`);
+
+  const exec = () => new Promise<number>((resolve) => {
+    const proc = cp.spawn('powershell.exe', opts.args, {
+      windowsHide: true,
+      shell: false,
+    });
+    proc.stdout.on('data', (d) => channel.append(d.toString()));
+    proc.stderr.on('data', (d) => channel.append(d.toString()));
+    proc.on('error', (err) => {
+      channel.appendLine(`\n[spawn error] ${err.message}`);
+      resolve(-1);
+    });
+    proc.on('close', (code) => {
+      channel.appendLine(`\n[exit ${code ?? '?'}]`);
+      resolve(code ?? -1);
+    });
+  });
+
+  const code = opts.withProgress
+    ? await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: opts.title, cancellable: false },
+        () => exec(),
+      )
+    : await exec();
+
+  if (code === 0) {
+    if (opts.revealOnSuccess) {
+      channel.show(true);
+    }
+    if (opts.successMessage) {
+      const actions = opts.successActions ?? [];
+      const titles = actions.map(a => a.title);
+      const choice = await vscode.window.showInformationMessage(
+        opts.successMessage,
+        ...titles,
+      );
+      const picked = actions.find(a => a.title === choice);
+      if (picked) { await picked.run(); }
+    }
+  } else {
+    channel.show(true);
+    const fallback = opts.failureMessage ?? `${opts.title} failed (exit ${code})`;
+    const choice = await vscode.window.showErrorMessage(fallback, 'Show output');
+    if (choice === 'Show output') { channel.show(true); }
+  }
+  return code;
+}
+
+export async function runInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
+  const ps = scriptPath(extensionUri, 'install.ps1');
+  return runPowerShellHidden({
+    title: 'Claude Usage Tracker — Setup',
+    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps, '-Port', String(port)],
+    withProgress: true,
+    successMessage:
+      'Claude Usage Tracker installed. Collector is running and will autostart at logon. ' +
+      'OpenTelemetry settings were written to ~/.claude/settings.json — restart any active Claude Code session to pick them up.',
+    failureMessage: 'Setup failed. See output for details.',
+    successActions: [
+      {
+        title: 'Open Dashboard',
+        run: async () => {
+          await vscode.commands.executeCommand('claudeUsageTracker.openDashboard');
+        },
+      },
+      {
+        title: 'Show output',
+        run: () => getChannel().show(true),
+      },
+    ],
+  });
+}
+
+export async function runUninstall(extensionUri: vscode.Uri, purge = false): Promise<number> {
+  const ps = scriptPath(extensionUri, 'uninstall.ps1');
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps];
+  if (purge) { args.push('-PurgeData'); }
+  return runPowerShellHidden({
+    title: 'Claude Usage Tracker — Uninstall',
+    args,
+    withProgress: true,
+    successMessage: purge
+      ? 'Claude Usage Tracker uninstalled and data deleted.'
+      : 'Claude Usage Tracker uninstalled. Data preserved at ~/.claude/usage-tracker.',
+    failureMessage: 'Uninstall failed. See output for details.',
+  });
+}
+
+export async function runStatus(extensionUri: vscode.Uri): Promise<number> {
+  const ps = scriptPath(extensionUri, 'status.ps1');
+  return runPowerShellHidden({
+    title: 'Claude Usage Tracker — Status',
+    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps],
+    revealOnSuccess: true,
+    // No success toast — the output channel is the result.
+  });
+}
+
+export async function runStartTask(): Promise<number> {
+  // The scheduled task action is wscript.exe + run-collector.vbs, which
+  // launches node detached. Start-ScheduledTask fires the action; wscript
+  // exits immediately after spawning node, and the task state returns to
+  // "Ready" while the collector keeps running in the background.
+  return runPowerShellHidden({
+    title: 'Claude Usage Tracker — Start',
+    args: ['-NoProfile', '-Command', 'Start-ScheduledTask -TaskName ClaudeCodeUsageTracker'],
+    successMessage: 'Collector started.',
+    failureMessage: 'Could not start collector. Run Setup first?',
+  });
+}
+
+// Because the scheduled task action exits immediately after launching node
+// (the .vbs is a fire-and-forget wrapper), Stop-ScheduledTask cannot kill
+// the running collector — instead, find the orphaned node process by its
+// command line and terminate it directly.
+const STOP_COMMAND =
+  "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | " +
+  "Where-Object { $_.CommandLine -match 'usage-tracker[\\\\/]bin[\\\\/]collector\\.js' }; " +
+  "if ($procs) { foreach ($p in $procs) { " +
+  "Stop-Process -Id $p.ProcessId -Force; " +
+  "Write-Host (\"Stopped pid=\" + $p.ProcessId) " +
+  "} } else { Write-Host 'No collector process is running.' }";
+
+export async function runStopTask(): Promise<number> {
+  return runPowerShellHidden({
+    title: 'Claude Usage Tracker — Stop',
+    args: ['-NoProfile', '-Command', STOP_COMMAND],
+    successMessage: 'Collector stopped.',
+    failureMessage: 'Could not stop collector.',
+  });
+}
+
+// Spawns `node scripts/import-projects-history.js` to backfill historical
+// usage from ~/.claude/projects JSONL transcripts. Cross-platform — does not
+// go through PowerShell. Streams stdout/stderr into the shared Output channel.
+export async function runImportHistorical(
+  extensionUri: vscode.Uri,
+  opts: { dryRun?: boolean } = {},
+): Promise<number> {
+  const channel = getChannel();
+  const js = scriptPath(extensionUri, 'import-projects-history.js');
+  const title = opts.dryRun
+    ? 'Claude Usage Tracker — Import historical (dry run)'
+    : 'Claude Usage Tracker — Import historical';
+  const args = [js];
+  if (opts.dryRun) { args.push('--dry-run'); }
+
+  channel.appendLine('');
+  channel.appendLine(`=== ${title} @ ${new Date().toISOString()} ===`);
+  channel.appendLine(`> node ${args.join(' ')}`);
+
+  const exec = () => new Promise<number>((resolve) => {
+    const proc = cp.spawn('node', args, { windowsHide: true, shell: false });
+    proc.stdout.on('data', (d) => channel.append(d.toString()));
+    proc.stderr.on('data', (d) => channel.append(d.toString()));
+    proc.on('error', (err) => {
+      channel.appendLine(`\n[spawn error] ${err.message}`);
+      resolve(-1);
+    });
+    proc.on('close', (code) => {
+      channel.appendLine(`\n[exit ${code ?? '?'}]`);
+      resolve(code ?? -1);
+    });
+  });
+
+  const code = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title, cancellable: false },
+    () => exec(),
+  );
+
+  if (code === 0) {
+    const successMsg = opts.dryRun
+      ? 'Dry run complete. See output for what would be imported.'
+      : 'Historical import complete. Dashboard will refresh.';
+    const choice = await vscode.window.showInformationMessage(successMsg, 'Show output');
+    if (choice === 'Show output') { channel.show(true); }
+  } else {
+    channel.show(true);
+    const choice = await vscode.window.showErrorMessage(
+      `Historical import failed (exit ${code}). Is Node.js installed and on PATH?`,
+      'Show output',
+    );
+    if (choice === 'Show output') { channel.show(true); }
+  }
+  return code;
+}
+
+export function isWindows(): boolean {
+  return process.platform === 'win32';
+}
+
+export function expectedInstallRoot(): string {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  return path.join(home, '.claude', 'usage-tracker');
+}
+
+export type PortStatus = 'free' | 'in-use-by-tracker' | 'in-use-by-other' | 'error';
+export interface PortCheckResult {
+  port: number;
+  status: PortStatus;
+  message: string;
+}
+
+// Pings <port>/status with a short timeout; resolves true if response shape
+// matches our collector's status payload (so we can distinguish "our own
+// collector still running" from "some other app holding the port").
+function pingIsOurCollector(port: number, timeoutMs = 800): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get({
+      hostname: '127.0.0.1', port, path: '/status', timeout: timeoutMs,
+    }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); resolve(false); return; }
+      const chunks: Buffer[] = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          // Status payload from collector.js has these fields.
+          resolve(j && typeof j === 'object'
+            && ('totalRequests' in j || 'totalLogPayloads' in j));
+        } catch { resolve(false); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+  });
+}
+
+function tryBind(port: number): Promise<{ free: true } | { free: false; code: string }> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      resolve({ free: false, code: err.code ?? 'EUNKNOWN' });
+    });
+    server.once('listening', () => {
+      server.close(() => resolve({ free: true }));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+export async function checkPort(port: number): Promise<PortCheckResult> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { port, status: 'error', message: 'Port must be an integer between 1 and 65535.' };
+  }
+  const bind = await tryBind(port);
+  if (bind.free) {
+    return { port, status: 'free', message: `Port ${port} is available.` };
+  }
+  if (bind.code === 'EADDRINUSE') {
+    const ours = await pingIsOurCollector(port);
+    if (ours) {
+      return {
+        port,
+        status: 'in-use-by-tracker',
+        message: `Port ${port} is in use by the current Claude Usage Tracker collector. Setup will restart it.`,
+      };
+    }
+    return {
+      port,
+      status: 'in-use-by-other',
+      message: `Port ${port} is in use by another process. Stop that process or pick a different port.`,
+    };
+  }
+  if (bind.code === 'EACCES') {
+    return { port, status: 'error', message: `Access denied binding port ${port}. Try a port above 1024.` };
+  }
+  return { port, status: 'error', message: `Could not check port ${port}: ${bind.code}` };
+}
