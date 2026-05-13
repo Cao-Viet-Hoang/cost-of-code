@@ -55,7 +55,7 @@ document.getElementById('clearFilter').addEventListener('click', () => {
   document.getElementById('filterModel').value = '';
   document.getElementById('filterSource').value = '';
   document.getElementById('filterWorkspace').value = '';
-  applyPreset('7d');
+  applyPreset('month');
 });
 document.getElementById('setupBtn').addEventListener('click', () => vscode.postMessage({ type: 'runInstall' }));
 
@@ -70,6 +70,15 @@ document.getElementById('uninstallBtn').addEventListener('click', () => openModa
 document.getElementById('confirmUninstallBtn').addEventListener('click', () => {
   closeModal('confirmUninstall');
   vscode.postMessage({ type: 'runUninstall' });
+});
+document.getElementById('importHistoricalBtn').addEventListener('click', () => openModal('confirmImportHistorical'));
+document.getElementById('confirmImportHistoricalBtn').addEventListener('click', () => {
+  closeModal('confirmImportHistorical');
+  vscode.postMessage({ type: 'importHistorical', payload: { dryRun: false } });
+});
+document.getElementById('dryRunImportBtn').addEventListener('click', () => {
+  closeModal('confirmImportHistorical');
+  vscode.postMessage({ type: 'importHistorical', payload: { dryRun: true } });
 });
 document.querySelectorAll('[data-modal-close]').forEach(b =>
   b.addEventListener('click', () => closeModal(b.getAttribute('data-modal-close'))));
@@ -170,7 +179,7 @@ function render(d) {
 }
 
 /* ----- Initial ----- */
-applyPreset('7d');         // sets dates and triggers a refresh
+applyPreset('month');         // sets dates and triggers a refresh
 startAutoRefresh(__AUTO_REFRESH_SECONDS__);
 `;
 

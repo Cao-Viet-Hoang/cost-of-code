@@ -4,7 +4,8 @@ import { HealthCheckService } from './healthCheck';
 import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
-  runInstall, runUninstall, runStartTask, runStopTask, isWindows,
+  runInstall, runUninstall, runStartTask, runStopTask,
+  runImportHistorical, isWindows,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -126,6 +127,12 @@ export class DashboardPanel {
         case 'openDataFolder': {
           const root = getPaths().root;
           await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(root));
+          return;
+        }
+        case 'importHistorical': {
+          const dryRun = !!(msg.payload as { dryRun?: boolean } | undefined)?.dryRun;
+          const code = await runImportHistorical(this.extensionUri, { dryRun });
+          if (code === 0 && !dryRun) { await this.refresh(); }
           return;
         }
         case 'export': {

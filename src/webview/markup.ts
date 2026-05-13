@@ -48,9 +48,9 @@ export function buildBodyHtml(): string {
     <div class="filter-row">
       <div class="preset-group" role="tablist" aria-label="Date presets">
         <button data-preset="today">Today</button>
-        <button data-preset="7d" class="active">7d</button>
+        <button data-preset="7d">7d</button>
         <button data-preset="30d">30d</button>
-        <button data-preset="mtd">MTD</button>
+        <button data-preset="month" class="active">This Month</button>
         <button data-preset="all">All</button>
         <button data-preset="custom">Custom</button>
       </div>

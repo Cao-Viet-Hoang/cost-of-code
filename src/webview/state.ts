@@ -7,14 +7,14 @@ const vscode = acquireVsCodeApi();
 
 /* ----- Filter & preset state ----- */
 const PRESETS = [
-  { id: 'today',   label: 'Today'    },
-  { id: '7d',      label: '7d'       },
-  { id: '30d',     label: '30d'      },
-  { id: 'mtd',     label: 'MTD'      },
-  { id: 'all',     label: 'All'      },
-  { id: 'custom',  label: 'Custom'   },
+  { id: 'today',   label: 'Today'      },
+  { id: '7d',      label: '7d'         },
+  { id: '30d',     label: '30d'        },
+  { id: 'month',   label: 'This Month' },
+  { id: 'all',     label: 'All'        },
+  { id: 'custom',  label: 'Custom'     },
 ];
-let currentPreset = '7d';
+let currentPreset = 'month';
 
 function presetRange(id) {
   const today = new Date();
@@ -22,7 +22,7 @@ function presetRange(id) {
   if (id === 'today') return { startDate: todayStr, endDate: todayStr };
   if (id === '7d')    return { startDate: dateOnly(addDays(today, -6)),  endDate: todayStr };
   if (id === '30d')   return { startDate: dateOnly(addDays(today, -29)), endDate: todayStr };
-  if (id === 'mtd')   return { startDate: dateOnly(startOfMonth(today)), endDate: todayStr };
+  if (id === 'month') return { startDate: dateOnly(startOfMonth(today)), endDate: todayStr };
   return { startDate: '', endDate: '' };
 }
 

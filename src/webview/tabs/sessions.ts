@@ -9,8 +9,8 @@ export const SESSIONS_HTML = `
         <p class="card-desc" id="sessionsSubtitle">All sessions in the selected filter</p>
       </div>
       <div class="card-actions">
-        <label class="field" style="min-width:auto">
-          <span>Page size</span>
+        <label class="field-inline">
+          <span class="label">Page size</span>
           <select id="sessionPageSize">
             <option value="25">25</option>
             <option value="50" selected>50</option>

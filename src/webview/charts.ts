@@ -212,7 +212,7 @@ function drawAreaChart(svg, data, getValue, getLabel, opts) {
     hit.addEventListener('mouseenter', () => {
       tipG.style.display = '';
       tipLabel.textContent = getLabel(d, i);
-      tipValue.textContent = opts.valueFmt(values[i]);
+      tipValue.textContent = (opts.cumulative ? 'Daily: ' : '') + opts.valueFmt(values[i]);
       if (tipCum && cumVals) tipCum.textContent = 'Cum: ' + opts.cumulative.fmt(cumVals[i]);
       const tx = Math.min(W - tipW - 8, Math.max(margin.left, x(i) - tipW / 2));
       const ty = Math.max(margin.top, y(values[i]) - tipH - 10);

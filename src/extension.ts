@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { DashboardPanel } from './DashboardPanel';
 import {
-  runInstall, runUninstall, runStatus, runStartTask, runStopTask, isWindows,
+  runInstall, runUninstall, runStatus, runStartTask, runStopTask,
+  runImportHistorical, isWindows,
 } from './installer';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -39,6 +40,16 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('claudeUsageTracker.showStatus', () => {
       if (isWindows()) { runStatus(ext); }
+    }),
+    vscode.commands.registerCommand('claudeUsageTracker.importHistorical', async () => {
+      const choice = await vscode.window.showInformationMessage(
+        'Backfill historical usage from ~/.claude/projects transcripts? Dates already covered by OTEL are skipped.',
+        { modal: true },
+        'Import',
+        'Dry run',
+      );
+      if (choice === 'Import') { await runImportHistorical(ext); }
+      else if (choice === 'Dry run') { await runImportHistorical(ext, { dryRun: true }); }
     }),
   );
 }

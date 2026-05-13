@@ -45,6 +45,11 @@
         "command": "claudeUsageTracker.showStatus",
         "title": "Show Collector Status",
         "category": "Cost Of Code"
+      },
+      {
+        "command": "claudeUsageTracker.importHistorical",
+        "title": "Import Historical Usage (from ~/.claude/projects)",
+        "category": "Cost Of Code"
       }
     ],
     "configuration": {

@@ -172,6 +172,61 @@ export async function runStopTask(): Promise<number> {
   });
 }
 
+// Spawns `node scripts/import-projects-history.js` to backfill historical
+// usage from ~/.claude/projects JSONL transcripts. Cross-platform — does not
+// go through PowerShell. Streams stdout/stderr into the shared Output channel.
+export async function runImportHistorical(
+  extensionUri: vscode.Uri,
+  opts: { dryRun?: boolean } = {},
+): Promise<number> {
+  const channel = getChannel();
+  const js = scriptPath(extensionUri, 'import-projects-history.js');
+  const title = opts.dryRun
+    ? 'Claude Usage Tracker — Import historical (dry run)'
+    : 'Claude Usage Tracker — Import historical';
+  const args = [js];
+  if (opts.dryRun) { args.push('--dry-run'); }
+
+  channel.appendLine('');
+  channel.appendLine(`=== ${title} @ ${new Date().toISOString()} ===`);
+  channel.appendLine(`> node ${args.join(' ')}`);
+
+  const exec = () => new Promise<number>((resolve) => {
+    const proc = cp.spawn('node', args, { windowsHide: true, shell: false });
+    proc.stdout.on('data', (d) => channel.append(d.toString()));
+    proc.stderr.on('data', (d) => channel.append(d.toString()));
+    proc.on('error', (err) => {
+      channel.appendLine(`\n[spawn error] ${err.message}`);
+      resolve(-1);
+    });
+    proc.on('close', (code) => {
+      channel.appendLine(`\n[exit ${code ?? '?'}]`);
+      resolve(code ?? -1);
+    });
+  });
+
+  const code = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title, cancellable: false },
+    () => exec(),
+  );
+
+  if (code === 0) {
+    const successMsg = opts.dryRun
+      ? 'Dry run complete. See output for what would be imported.'
+      : 'Historical import complete. Dashboard will refresh.';
+    const choice = await vscode.window.showInformationMessage(successMsg, 'Show output');
+    if (choice === 'Show output') { channel.show(true); }
+  } else {
+    channel.show(true);
+    const choice = await vscode.window.showErrorMessage(
+      `Historical import failed (exit ${code}). Is Node.js installed and on PATH?`,
+      'Show output',
+    );
+    if (choice === 'Show output') { channel.show(true); }
+  }
+  return code;
+}
+
 export function isWindows(): boolean {
   return process.platform === 'win32';
 }

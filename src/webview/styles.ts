@@ -445,7 +445,7 @@ input:focus, select:focus { outline: none; border-color: hsl(var(--ring)); box-s
 }
 .card-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 .card-desc { margin: 3px 0 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
-.card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .card-body { padding: 16px 18px; }
 .chart-card .card-body { padding: 12px 18px 16px; }
 
@@ -640,7 +640,7 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .action-group {
   display: grid;
   grid-template-columns: 110px 1fr;
-  align-items: center;
+  align-items: start;
   gap: 14px;
   padding: 14px 0;
   border-bottom: 1px solid hsl(var(--border));
@@ -649,6 +649,7 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .action-group:last-child  { padding-bottom: 0; border-bottom: 0; }
 .action-group h4 {
   margin: 0;
+  padding-top: 8px;
   font-size: 11.5px; font-weight: 600;
   color: hsl(var(--muted-foreground));
   text-transform: uppercase; letter-spacing: 0.04em;
@@ -657,8 +658,26 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .action-row {
   display: flex; flex-wrap: wrap; gap: 8px;
 }
+.action-col {
+  display: flex; flex-direction: column; gap: 8px;
+  min-width: 0;
+}
+.action-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+.action-hint code {
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+}
 @media (max-width: 560px) {
   .action-group { grid-template-columns: 1fr; gap: 8px; padding: 12px 0; }
+  .action-group h4 { padding-top: 0; }
 }
 
 /* ============================== HINT / EMPTY / TOAST ============================== */

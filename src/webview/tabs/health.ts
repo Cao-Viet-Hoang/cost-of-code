@@ -39,11 +39,33 @@ export const HEALTH_HTML = `
           <button class="btn btn-secondary" id="exportsBtn">${ICONS.folder} Exports folder</button>
         </div>
       </div>
+      <div class="action-group">
+        <h4>Data</h4>
+        <div class="action-col">
+          <div class="action-row">
+            <button class="btn btn-secondary" id="importHistoricalBtn">${ICONS.download} Import historical</button>
+          </div>
+          <p class="action-hint">Backfill past usage from <code>~/.claude/projects</code> transcripts. Dates already covered by OTEL are skipped.</p>
+        </div>
+      </div>
       <div class="action-group danger">
         <h4>Danger zone</h4>
         <div class="action-row">
           <button class="btn btn-destructive-ghost" id="uninstallBtn">Uninstall…</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="confirmImportHistorical">
+    <div class="modal">
+      <h3>Import historical usage?</h3>
+      <p>This reads conversation transcripts from <code>~/.claude/projects</code> and writes any missing days into your usage folder. Dates already covered by OTEL are skipped, so re-running is safe.</p>
+      <p class="card-desc">Use <strong>Dry run</strong> to preview what would be imported without writing files.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-modal-close="confirmImportHistorical">Cancel</button>
+        <button class="btn btn-secondary" id="dryRunImportBtn">Dry run</button>
+        <button class="btn btn-primary" id="confirmImportHistoricalBtn">Import</button>
       </div>
     </div>
   </div>
