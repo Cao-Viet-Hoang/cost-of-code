@@ -45,7 +45,11 @@ export const TRENDS_HTML = `
       </div>
       <div class="card-body">
         <div id="hourlyHeatmap" class="heatmap"></div>
-        <div class="hint" style="margin-top:10px">Darker = higher spend. Hover a cell for details.</div>
+        <div class="heatmap-legend">
+          <span class="heatmap-legend-label">Less</span>
+          <span class="heatmap-legend-bar"></span>
+          <span class="heatmap-legend-label">More</span>
+        </div>
       </div>
     </div>
   </div>

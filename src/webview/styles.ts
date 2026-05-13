@@ -511,6 +511,24 @@ input:focus, select:focus { outline: none; border-color: hsl(var(--ring)); box-s
   min-height: 14px;
 }
 .heatmap .cell:hover { outline: 1px solid hsl(var(--ring)); outline-offset: 1px; }
+.heatmap-legend {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.heatmap-legend-label {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  letter-spacing: 0.02em;
+}
+.heatmap-legend-bar {
+  width: 96px; height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right,
+    hsl(var(--chart-1) / 0.08),
+    hsl(var(--chart-1) / 1));
+  border: 1px solid hsl(var(--border));
+}
 
 .bar-row {
   display: grid; grid-template-columns: minmax(120px, 1fr) 2fr auto;
@@ -693,6 +711,22 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .hint strong { color: hsl(var(--foreground)); font-weight: 500; }
 .hint.warn { border-left-color: hsl(var(--warning)); }
 .hint.bad  { border-left-color: hsl(var(--destructive)); }
+
+.footnote {
+  margin: 16px 4px 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+}
+.footnote strong { color: hsl(var(--foreground)); font-weight: 600; }
+.footnote em     { font-style: italic; color: hsl(var(--foreground)); }
+.footnote code {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+}
 
 .empty {
   display: flex; flex-direction: column;

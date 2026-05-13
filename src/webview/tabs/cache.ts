@@ -39,11 +39,11 @@ export const CACHE_HTML = `
     </div>
   </div>
 
-  <div class="hint">
+  <p class="footnote">
     <strong>Estimated savings</strong> use Anthropic list prices (cache-read ~10% of fresh input) and the
     <em>cache_read_tokens</em> on each record. This is an estimate for trend-watching, <em>not</em> billing.
     Override prices via the <code>claudeUsageTracker.pricing</code> setting if Anthropic changes them.
-  </div>
+  </p>
 </section>
 `;
 
