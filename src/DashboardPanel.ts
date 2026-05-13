@@ -5,7 +5,8 @@ import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
   runInstall, runUninstall, runStartTask, runStopTask,
-  runImportHistorical, checkPort, isWindows,
+  runLinuxInstall, runLinuxUninstall, runLinuxStart, runLinuxStop,
+  runImportHistorical, checkPort, isWindows, isLinux,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -101,7 +102,17 @@ export class DashboardPanel {
         case 'runInstall': {
           const payload = msg.payload as { port?: number } | undefined;
           const port = Number.isInteger(payload?.port) ? Number(payload!.port) : this.currentPort;
-          const code = await runInstall(this.extensionUri, port);
+          let code: number;
+          if (isWindows()) {
+            code = await runInstall(this.extensionUri, port);
+          } else if (isLinux()) {
+            code = await runLinuxInstall(this.extensionUri, port);
+          } else {
+            vscode.window.showWarningMessage(
+              'Setup is supported on Windows and Linux. On macOS, run install.sh manually.',
+            );
+            return;
+          }
           if (code === 0 && port !== this.currentPort) {
             await vscode.workspace
               .getConfiguration('claudeUsageTracker')
@@ -136,7 +147,11 @@ export class DashboardPanel {
           return;
         }
         case 'runUninstall':
-          await runUninstall(this.extensionUri);
+          if (isWindows()) {
+            await runUninstall(this.extensionUri);
+          } else if (isLinux()) {
+            await runLinuxUninstall(this.extensionUri);
+          }
           await this.refresh();
           return;
         case 'runStatus': {
@@ -145,16 +160,14 @@ export class DashboardPanel {
           return;
         }
         case 'startCollector':
-          if (isWindows()) {
-            await runStartTask();
-            await this.refresh();
-          }
+          if (isWindows()) { await runStartTask(); }
+          else if (isLinux()) { await runLinuxStart(); }
+          await this.refresh();
           return;
         case 'stopCollector':
-          if (isWindows()) {
-            await runStopTask();
-            await this.refresh();
-          }
+          if (isWindows()) { await runStopTask(); }
+          else if (isLinux()) { await runLinuxStop(); }
+          await this.refresh();
           return;
         case 'openExports': {
           const dir = this.exporter.exportsDir();

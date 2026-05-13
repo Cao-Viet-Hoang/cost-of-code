@@ -6,6 +6,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getPaths } from './paths';
 import { UsageReader } from './usageReader';
+import { LINUX_SERVICE_NAME } from './installer';
 import type {
   CollectorStatus,
   HealthReport,
@@ -83,22 +84,58 @@ export class HealthCheckService {
   }
 
   async scheduledTaskRegistered(): Promise<boolean | null> {
-    if (process.platform !== 'win32') { return null; }
-    try {
-      await execFileP('schtasks.exe', ['/Query', '/TN', TASK_NAME], { windowsHide: true });
-      return true;
-    } catch (err: unknown) {
-      const msg = (err as { stderr?: string; message?: string }).stderr
-        ?? (err as Error).message
-        ?? '';
-      if (msg.includes('cannot find') || msg.includes('không thể tìm')) {
+    if (process.platform === 'win32') {
+      try {
+        await execFileP('schtasks.exe', ['/Query', '/TN', TASK_NAME], { windowsHide: true });
+        return true;
+      } catch {
         return false;
       }
-      return false;
     }
+    if (process.platform === 'linux') {
+      // Try systemd user service first
+      try {
+        await execFileP('systemctl', ['--user', 'is-enabled', LINUX_SERVICE_NAME]);
+        return true;
+      } catch {
+        // systemctl not available or service not enabled; fall back to crontab
+      }
+      try {
+        const { stdout } = await execFileP('crontab', ['-l']);
+        return stdout.includes('collector.js');
+      } catch {
+        return false;
+      }
+    }
+    return null;
   }
 
   async scheduledTaskDetail(): Promise<ScheduledTaskDetail | null> {
+    if (process.platform === 'linux') {
+      try {
+        const { stdout } = await execFileP('systemctl', [
+          '--user', 'show', LINUX_SERVICE_NAME,
+          '--property=ActiveState,LoadState',
+        ]);
+        const props: Record<string, string> = {};
+        for (const line of stdout.trim().split('\n')) {
+          const idx = line.indexOf('=');
+          if (idx !== -1) { props[line.slice(0, idx)] = line.slice(idx + 1); }
+        }
+        if (props.LoadState !== 'loaded') {
+          return { registered: false, state: null, lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+        }
+        return {
+          registered: true,
+          state: props.ActiveState ?? null,
+          lastRunTime: null,
+          lastTaskResult: null,
+          nextRunTime: null,
+        };
+      } catch {
+        return { registered: false, state: null, lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+      }
+    }
     if (process.platform !== 'win32') { return null; }
     // Use PowerShell to query Get-ScheduledTask + Get-ScheduledTaskInfo and
     // emit JSON. Falls back to "not registered" if the cmdlet errors.
@@ -237,7 +274,7 @@ export class HealthCheckService {
       );
     }
     if (taskRegistered === false) {
-      notes.push('No scheduled task registered. The collector will not start automatically at logon.');
+      notes.push('No autostart entry registered. The collector will not start automatically at login.');
     }
     // The most useful diagnostic: collector is alive, but Claude Code has
     // never sent a log payload to it.

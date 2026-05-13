@@ -2,14 +2,8 @@ import * as path from 'path';
 import * as cp from 'child_process';
 import * as http from 'http';
 import * as net from 'net';
+import * as os from 'os';
 import * as vscode from 'vscode';
-
-// PowerShell script runner. Runs hidden (no terminal flicker) and streams
-// stdout/stderr into a shared Output channel. Shows a single notification on
-// completion: success → info toast; failure → error toast with "Show output".
-//
-// `runStatus` always reveals the output channel because its purpose is to
-// show information.
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -28,28 +22,28 @@ interface RunOptions {
   title: string;
   args: string[];
   withProgress?: boolean;
-  // If true, reveal the Output channel even on success (e.g. status command).
   revealOnSuccess?: boolean;
-  // Friendlier notification messages (success / failure).
   successMessage?: string;
   failureMessage?: string;
-  // Optional buttons for the success notification.
   successActions?: Array<{ title: string; run: () => void | Promise<void> }>;
 }
 
-async function runPowerShellHidden(opts: RunOptions): Promise<number> {
+// Shared runner: spawns `executable` with `opts.args`, streams stdout/stderr
+// to the Output channel, and shows a notification on completion.
+async function runProcessHidden(
+  executable: string,
+  opts: RunOptions,
+  spawnOpts: cp.SpawnOptions,
+): Promise<number> {
   const channel = getChannel();
   channel.appendLine('');
   channel.appendLine(`=== ${opts.title} @ ${new Date().toISOString()} ===`);
-  channel.appendLine(`> powershell ${opts.args.join(' ')}`);
+  channel.appendLine(`> ${executable} ${opts.args.join(' ')}`);
 
   const exec = () => new Promise<number>((resolve) => {
-    const proc = cp.spawn('powershell.exe', opts.args, {
-      windowsHide: true,
-      shell: false,
-    });
-    proc.stdout.on('data', (d) => channel.append(d.toString()));
-    proc.stderr.on('data', (d) => channel.append(d.toString()));
+    const proc = cp.spawn(executable, opts.args, spawnOpts);
+    proc.stdout!.on('data', (d) => channel.append(d.toString()));
+    proc.stderr!.on('data', (d) => channel.append(d.toString()));
     proc.on('error', (err) => {
       channel.appendLine(`\n[spawn error] ${err.message}`);
       resolve(-1);
@@ -89,6 +83,16 @@ async function runPowerShellHidden(opts: RunOptions): Promise<number> {
   }
   return code;
 }
+
+function runPowerShellHidden(opts: RunOptions): Promise<number> {
+  return runProcessHidden('powershell.exe', opts, { windowsHide: true, shell: false });
+}
+
+function runBashHidden(opts: RunOptions): Promise<number> {
+  return runProcessHidden('bash', opts, { shell: false });
+}
+
+// ─── Windows functions ────────────────────────────────────────────────────────
 
 export async function runInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const ps = scriptPath(extensionUri, 'install.ps1');
@@ -136,15 +140,10 @@ export async function runStatus(extensionUri: vscode.Uri): Promise<number> {
     title: 'Claude Usage Tracker — Status',
     args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps],
     revealOnSuccess: true,
-    // No success toast — the output channel is the result.
   });
 }
 
 export async function runStartTask(): Promise<number> {
-  // The scheduled task action is wscript.exe + run-collector.vbs, which
-  // launches node detached. Start-ScheduledTask fires the action; wscript
-  // exits immediately after spawning node, and the task state returns to
-  // "Ready" while the collector keeps running in the background.
   return runPowerShellHidden({
     title: 'Claude Usage Tracker — Start',
     args: ['-NoProfile', '-Command', 'Start-ScheduledTask -TaskName ClaudeCodeUsageTracker'],
@@ -153,10 +152,6 @@ export async function runStartTask(): Promise<number> {
   });
 }
 
-// Because the scheduled task action exits immediately after launching node
-// (the .vbs is a fire-and-forget wrapper), Stop-ScheduledTask cannot kill
-// the running collector — instead, find the orphaned node process by its
-// command line and terminate it directly.
 const STOP_COMMAND =
   "$procs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | " +
   "Where-Object { $_.CommandLine -match 'usage-tracker[\\\\/]bin[\\\\/]collector\\.js' }; " +
@@ -174,9 +169,98 @@ export async function runStopTask(): Promise<number> {
   });
 }
 
+// ─── Linux functions ──────────────────────────────────────────────────────────
+
+export const LINUX_SERVICE_NAME = 'claude-usage-tracker';
+
+export async function runLinuxInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
+  const sh = scriptPath(extensionUri, 'install.sh');
+  const sourceDir = vscode.Uri.joinPath(extensionUri, 'collector').fsPath;
+  return runBashHidden({
+    title: 'Claude Usage Tracker — Setup',
+    args: [sh, '--port', String(port), '--source-dir', sourceDir],
+    withProgress: true,
+    successMessage:
+      'Claude Usage Tracker installed. Collector is running and will autostart at login. ' +
+      'OpenTelemetry settings were written to ~/.claude/settings.json — restart any active Claude Code session to pick them up.',
+    failureMessage: 'Setup failed. See output for details.',
+    successActions: [
+      {
+        title: 'Open Dashboard',
+        run: async () => {
+          await vscode.commands.executeCommand('claudeUsageTracker.openDashboard');
+        },
+      },
+      {
+        title: 'Show output',
+        run: () => getChannel().show(true),
+      },
+    ],
+  });
+}
+
+export async function runLinuxUninstall(extensionUri: vscode.Uri, purge = false): Promise<number> {
+  const sh = scriptPath(extensionUri, 'uninstall.sh');
+  const args = [sh];
+  if (purge) { args.push('--purge-data'); }
+  return runBashHidden({
+    title: 'Claude Usage Tracker — Uninstall',
+    args,
+    withProgress: true,
+    successMessage: purge
+      ? 'Claude Usage Tracker uninstalled and data deleted.'
+      : 'Claude Usage Tracker uninstalled. Data preserved at ~/.claude/usage-tracker.',
+    failureMessage: 'Uninstall failed. See output for details.',
+  });
+}
+
+export async function runLinuxStatus(extensionUri: vscode.Uri, port = 4318): Promise<number> {
+  const sh = scriptPath(extensionUri, 'status.sh');
+  return runBashHidden({
+    title: 'Claude Usage Tracker — Status',
+    args: [sh, '--port', String(port)],
+    revealOnSuccess: true,
+  });
+}
+
+export async function runLinuxStart(): Promise<number> {
+  const home = process.env.HOME || os.homedir();
+  const collectorJs = path.join(home, '.claude', 'usage-tracker', 'bin', 'collector.js');
+  const logsDir = path.join(home, '.claude', 'usage-tracker', 'logs');
+  const script =
+    `if systemctl --user start ${LINUX_SERVICE_NAME} 2>/dev/null; then\n` +
+    `  echo "Started systemd service '${LINUX_SERVICE_NAME}'"\n` +
+    `elif [ -f "${collectorJs}" ]; then\n` +
+    `  mkdir -p "${logsDir}"\n` +
+    `  nohup node "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
+    `  echo "Spawned collector (pid=$!)"\n` +
+    `else\n` +
+    `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
+    `fi`;
+  return runBashHidden({
+    title: 'Claude Usage Tracker — Start',
+    args: ['-c', script],
+    successMessage: 'Collector started.',
+    failureMessage: 'Could not start collector. Run Setup first?',
+  });
+}
+
+export async function runLinuxStop(): Promise<number> {
+  const script =
+    `systemctl --user stop ${LINUX_SERVICE_NAME} 2>/dev/null || true\n` +
+    `pkill -f 'usage-tracker/bin/collector\\.js' 2>/dev/null && echo "Stopped collector process(es)" || echo "No collector process was running"`;
+  return runBashHidden({
+    title: 'Claude Usage Tracker — Stop',
+    args: ['-c', script],
+    successMessage: 'Collector stopped.',
+    failureMessage: 'Could not stop collector.',
+  });
+}
+
+// ─── Cross-platform utilities ─────────────────────────────────────────────────
+
 // Spawns `node scripts/import-projects-history.js` to backfill historical
-// usage from ~/.claude/projects JSONL transcripts. Cross-platform — does not
-// go through PowerShell. Streams stdout/stderr into the shared Output channel.
+// usage from ~/.claude/projects JSONL transcripts. Cross-platform.
 export async function runImportHistorical(
   extensionUri: vscode.Uri,
   opts: { dryRun?: boolean } = {},
@@ -233,6 +317,10 @@ export function isWindows(): boolean {
   return process.platform === 'win32';
 }
 
+export function isLinux(): boolean {
+  return process.platform === 'linux';
+}
+
 export function expectedInstallRoot(): string {
   const home = process.env.USERPROFILE || process.env.HOME || '';
   return path.join(home, '.claude', 'usage-tracker');
@@ -245,9 +333,6 @@ export interface PortCheckResult {
   message: string;
 }
 
-// Pings <port>/status with a short timeout; resolves true if response shape
-// matches our collector's status payload (so we can distinguish "our own
-// collector still running" from "some other app holding the port").
 function pingIsOurCollector(port: number, timeoutMs = 800): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get({
@@ -259,7 +344,6 @@ function pingIsOurCollector(port: number, timeoutMs = 800): Promise<boolean> {
       res.on('end', () => {
         try {
           const j = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          // Status payload from collector.js has these fields.
           resolve(j && typeof j === 'object'
             && ('totalRequests' in j || 'totalLogPayloads' in j));
         } catch { resolve(false); }

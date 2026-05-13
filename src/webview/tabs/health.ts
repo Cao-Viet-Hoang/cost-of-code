@@ -107,7 +107,7 @@ export const HEALTH_HTML = `
   <div class="modal-bg" id="statusModal">
     <div class="modal modal-wide">
       <h3>Collector status</h3>
-      <p class="card-desc">Detailed snapshot from the scheduled task, HTTP endpoint, status file, and Claude Code settings.</p>
+      <p class="card-desc">Detailed snapshot from the autostart entry, HTTP endpoint, status file, and Claude Code settings.</p>
       <div id="statusModalBody" class="status-detail"></div>
       <div class="modal-actions">
         <button class="btn btn-ghost" data-modal-close="statusModal">Close</button>
@@ -146,7 +146,7 @@ function renderHealth(d) {
     ['Last received event',                  '<span class="health-value" title="' + escapeHtml(fmtTimeFull(h.lastEventAt)) + '">' + fmtRel(h.lastEventAt) + '</span>'],
     ['Last usage record',                    '<span class="health-value" title="' + escapeHtml(fmtTimeFull(h.lastUsageAt)) + '">' + fmtRel(h.lastUsageAt) + '</span>'],
     ['Telemetry env configured',             yn(h.telemetryEnvConfigured)],
-    ['Scheduled task registered',            h.scheduledTaskRegistered === null ? unkBadge : yn(h.scheduledTaskRegistered)],
+    ['Autostart registered',                  h.scheduledTaskRegistered === null ? unkBadge : yn(h.scheduledTaskRegistered)],
     ['Has any usage records',                yn(h.hasUsageRecords)],
     ['OTLP requests received',               '<span class="health-value">' + fmt(h.totalRequests) + '</span>'],
     ['OTLP log payloads received',           '<span class="health-value">' + fmt(h.totalLogPayloads) + '</span>'],
@@ -183,17 +183,18 @@ function renderStatusDetail(d) {
   const section = (title, html) =>
     '<div class="status-section"><h4>' + escapeHtml(title) + '</h4>' + html + '</div>';
 
-  /* ----- Scheduled task ----- */
+  /* ----- Autostart ----- */
   let taskHtml;
   if (d.scheduledTask === null) {
-    taskHtml = '<div class="hint">Scheduled tasks are a Windows-only feature.</div>';
+    taskHtml = '<div class="hint">Autostart information is not available on this platform.</div>';
   } else if (!d.scheduledTask.registered) {
     taskHtml = row('Registered', badBadge('no')) +
-      '<div class="hint" style="margin-top:8px">Run setup to register the autostart task.</div>';
+      '<div class="hint" style="margin-top:8px">Run setup to register the autostart entry.</div>';
   } else {
     const t = d.scheduledTask;
-    const stateBadge = t.state === 'Ready' || t.state === 'Running'
-      ? okBadge(t.state) : warnBadge(t.state || 'unknown');
+    const OK_STATES = new Set(['Ready', 'Running', 'active', 'running']);
+    const stateBadge = OK_STATES.has(t.state ?? '')
+      ? okBadge(t.state ?? '') : warnBadge(t.state || 'unknown');
     const resultBadge = t.lastTaskResult === 0
       ? okBadge('0 (success)')
       : t.lastTaskResult === null
@@ -248,7 +249,7 @@ function renderStatusDetail(d) {
   }
 
   document.getElementById('statusModalBody').innerHTML =
-    section('Scheduled task', taskHtml) +
+    section('Autostart', taskHtml) +
     section('Collector HTTP', httpHtml) +
     section('Status file', fileHtml) +
     section('Claude Code telemetry env', envHtml);
