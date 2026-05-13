@@ -1,12 +1,29 @@
 {
   "name": "cost-of-code",
-  "displayName": "Claude Code Usage Tracker",
+  "displayName": "Cost of Code",
   "publisher": "cost-of-code",
   "description": "Local-first dashboard for Claude Code token usage and estimated cost. Collects OpenTelemetry data locally and stores JSONL under ~/.claude/usage-tracker.",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cao-Viet-Hoang/cost-of-code.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cao-Viet-Hoang/cost-of-code/issues"
+  },
+  "homepage": "https://github.com/Cao-Viet-Hoang/cost-of-code#readme",
+  "packageManager": "npm@11.9.0",
+  "keywords": [
+    "claude-code",
+    "opentelemetry",
+    "usage-tracker",
+    "cost-dashboard",
+    "vscode-extension"
+  ],
   "icon": "media/icon.png",
   "engines": {
-    "vscode": "^1.118.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other",
@@ -19,41 +36,41 @@
       {
         "command": "claudeUsageTracker.openDashboard",
         "title": "Open Dashboard",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.runSetup",
         "title": "Run Setup (install collector + autostart)",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.uninstall",
         "title": "Uninstall Collector",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.startCollector",
         "title": "Start Collector",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.stopCollector",
         "title": "Stop Collector",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.showStatus",
         "title": "Show Collector Status",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       },
       {
         "command": "claudeUsageTracker.importHistorical",
         "title": "Import Historical Usage (from ~/.claude/projects)",
-        "category": "Cost Of Code"
+        "category": "Cost of Code"
       }
     ],
     "configuration": {
-      "title": "Claude Code Usage Tracker",
+      "title": "Cost of Code",
       "properties": {
         "claudeUsageTracker.dataFolder": {
           "type": "string",
@@ -100,16 +117,19 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "check": "npm run compile && npm run lint",
     "build-icon": "node scripts/build-icon.js",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
+    "pretest": "npm run check",
+    "lint": "eslint src --max-warnings=0",
+    "package": "vsce package",
     "test": "vscode-test"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "@types/vscode": "^1.118.0",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "3.9.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",

@@ -33,9 +33,11 @@ export function activate(context: vscode.ExtensionContext) {
         'Uninstall and delete data',
       );
       if (choice === 'Uninstall') {
-        isWindows() ? runUninstall(ext) : runLinuxUninstall(ext);
+        if (isWindows()) { runUninstall(ext); }
+        else if (isLinux()) { runLinuxUninstall(ext); }
       } else if (choice === 'Uninstall and delete data') {
-        isWindows() ? runUninstall(ext, true) : runLinuxUninstall(ext, true);
+        if (isWindows()) { runUninstall(ext, true); }
+        else if (isLinux()) { runLinuxUninstall(ext, true); }
       }
     }),
 

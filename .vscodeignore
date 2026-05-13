@@ -1,8 +1,10 @@
 .vscode/**
 .vscode-test/**
 src/**
+out/test/**
 .gitignore
 .yarnrc
+.vscode-test.mjs
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs
@@ -11,4 +13,6 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 *.vsix
 build.bat
+setup.bat
+scripts/build-icon.js
 claude_code_usage_tracker_requirements.md
