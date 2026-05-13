@@ -57,10 +57,10 @@ document.getElementById('clearFilter').addEventListener('click', () => {
   document.getElementById('filterWorkspace').value = '';
   applyPreset('month');
 });
-document.getElementById('setupBtn').addEventListener('click', () => vscode.postMessage({ type: 'runInstall' }));
+document.getElementById('setupBtn').addEventListener('click', () => openSetupModal());
 
 /* ----- Health buttons ----- */
-document.getElementById('installBtn').addEventListener('click', () => vscode.postMessage({ type: 'runInstall' }));
+document.getElementById('installBtn').addEventListener('click', () => openSetupModal());
 document.getElementById('startBtn').addEventListener('click',   () => vscode.postMessage({ type: 'startCollector' }));
 document.getElementById('stopBtn').addEventListener('click',    () => vscode.postMessage({ type: 'stopCollector' }));
 document.getElementById('statusBtn').addEventListener('click',  () => vscode.postMessage({ type: 'runStatus' }));
@@ -85,7 +85,101 @@ document.querySelectorAll('[data-modal-close]').forEach(b =>
 
 /* ----- First-run setup button ----- */
 const firstRunSetup = document.getElementById('firstRunSetup');
-if (firstRunSetup) firstRunSetup.addEventListener('click', () => vscode.postMessage({ type: 'runInstall' }));
+if (firstRunSetup) firstRunSetup.addEventListener('click', () => openSetupModal());
+
+/* ----- Setup modal ----- */
+let runSetupLabel = 'Run setup';
+function openSetupModal() {
+  document.getElementById('setupStatusBox').hidden = true;
+  document.getElementById('setupPortResult').innerHTML = '';
+  document.getElementById('setupPortInput').value = '4318';
+  runSetupLabel = 'Run setup';
+  setupPending = null;
+  setSetupBusy(false, runSetupLabel);
+  openModal('setupModal');
+  vscode.postMessage({ type: 'getSetupState' });
+}
+function renderSetupState(s) {
+  const portInput = document.getElementById('setupPortInput');
+  if (s.currentPort) portInput.value = String(s.currentPort);
+
+  const box = document.getElementById('setupStatusBox');
+  const runBtn = document.getElementById('runSetupBtn');
+  if (s.alreadyInstalled) {
+    box.hidden = false;
+    box.className = 'setup-status ok';
+    box.innerHTML =
+      '<strong>Already set up.</strong> ' +
+      'You don\\'t need to run setup again unless something looks broken in the Collector status panel. ' +
+      'Re-running will reinstall the collector files and re-register the autostart task.';
+    runSetupLabel = 'Re-run setup';
+  } else {
+    box.hidden = false;
+    box.className = 'setup-status warn';
+    const parts = [];
+    if (s.taskRegistered === false) parts.push('scheduled task not registered');
+    if (!s.envConfigured) parts.push('telemetry env not configured');
+    box.innerHTML =
+      '<strong>Not fully set up yet.</strong> ' +
+      (parts.length ? ('Missing: ' + parts.join(', ') + '.') : 'Run setup to install the collector and autostart task.');
+    runSetupLabel = 'Run setup';
+  }
+  runBtn.textContent = runSetupLabel;
+}
+let setupPending = null; // null | 'manual' | 'install'
+function setSetupBusy(busy, runLabel) {
+  const checkBtn = document.getElementById('checkPortBtn');
+  const runBtn = document.getElementById('runSetupBtn');
+  const input = document.getElementById('setupPortInput');
+  checkBtn.disabled = busy;
+  runBtn.disabled = busy;
+  input.disabled = busy;
+  if (runLabel) runBtn.textContent = runLabel;
+}
+function renderPortCheck(r) {
+  const el = document.getElementById('setupPortResult');
+  const cls = r.status === 'free' ? 'ok'
+    : r.status === 'in-use-by-tracker' ? 'info'
+    : 'bad';
+  el.className = 'setup-port-result ' + cls;
+  el.textContent = r.message;
+
+  // Pre-flight branch: user clicked Run setup, we ran a check first.
+  if (setupPending === 'install') {
+    setupPending = null;
+    const safe = r.status === 'free' || r.status === 'in-use-by-tracker';
+    if (safe) {
+      closeModal('setupModal');
+      vscode.postMessage({ type: 'runInstall', payload: { port: r.port } });
+    } else {
+      setSetupBusy(false, runSetupLabel);
+    }
+    return;
+  }
+  setupPending = null;
+  setSetupBusy(false, runSetupLabel);
+}
+document.getElementById('checkPortBtn').addEventListener('click', () => {
+  const port = parseInt(document.getElementById('setupPortInput').value, 10);
+  setupPending = 'manual';
+  setSetupBusy(true);
+  vscode.postMessage({ type: 'checkPort', payload: { port } });
+});
+document.getElementById('setupPortInput').addEventListener('input', () => {
+  document.getElementById('setupPortResult').innerHTML = '';
+});
+document.getElementById('runSetupBtn').addEventListener('click', () => {
+  const port = parseInt(document.getElementById('setupPortInput').value, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    document.getElementById('setupPortResult').className = 'setup-port-result bad';
+    document.getElementById('setupPortResult').textContent = 'Port must be an integer between 1 and 65535.';
+    return;
+  }
+  // Pre-flight check — install proceeds in renderPortCheck if safe.
+  setupPending = 'install';
+  setSetupBusy(true, 'Checking port…');
+  vscode.postMessage({ type: 'checkPort', payload: { port } });
+});
 
 /* ----- Exports ----- */
 document.querySelectorAll('button[data-export]').forEach(btn => {
@@ -134,6 +228,10 @@ window.addEventListener('message', (event) => {
     if (lastData) render(lastData);
   } else if (msg.type === 'statusDetail') {
     renderStatusDetail(msg.payload);
+  } else if (msg.type === 'setupState') {
+    renderSetupState(msg.payload);
+  } else if (msg.type === 'portCheck') {
+    renderPortCheck(msg.payload);
   } else if (msg.type === 'error') {
     showToast(msg.payload.message);
   }

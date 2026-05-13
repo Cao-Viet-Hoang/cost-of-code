@@ -1,5 +1,7 @@
 import * as path from 'path';
 import * as cp from 'child_process';
+import * as http from 'http';
+import * as net from 'net';
 import * as vscode from 'vscode';
 
 // PowerShell script runner. Runs hidden (no terminal flicker) and streams
@@ -234,4 +236,78 @@ export function isWindows(): boolean {
 export function expectedInstallRoot(): string {
   const home = process.env.USERPROFILE || process.env.HOME || '';
   return path.join(home, '.claude', 'usage-tracker');
+}
+
+export type PortStatus = 'free' | 'in-use-by-tracker' | 'in-use-by-other' | 'error';
+export interface PortCheckResult {
+  port: number;
+  status: PortStatus;
+  message: string;
+}
+
+// Pings <port>/status with a short timeout; resolves true if response shape
+// matches our collector's status payload (so we can distinguish "our own
+// collector still running" from "some other app holding the port").
+function pingIsOurCollector(port: number, timeoutMs = 800): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get({
+      hostname: '127.0.0.1', port, path: '/status', timeout: timeoutMs,
+    }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); resolve(false); return; }
+      const chunks: Buffer[] = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          // Status payload from collector.js has these fields.
+          resolve(j && typeof j === 'object'
+            && ('totalRequests' in j || 'totalLogPayloads' in j));
+        } catch { resolve(false); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+  });
+}
+
+function tryBind(port: number): Promise<{ free: true } | { free: false; code: string }> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      resolve({ free: false, code: err.code ?? 'EUNKNOWN' });
+    });
+    server.once('listening', () => {
+      server.close(() => resolve({ free: true }));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+export async function checkPort(port: number): Promise<PortCheckResult> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { port, status: 'error', message: 'Port must be an integer between 1 and 65535.' };
+  }
+  const bind = await tryBind(port);
+  if (bind.free) {
+    return { port, status: 'free', message: `Port ${port} is available.` };
+  }
+  if (bind.code === 'EADDRINUSE') {
+    const ours = await pingIsOurCollector(port);
+    if (ours) {
+      return {
+        port,
+        status: 'in-use-by-tracker',
+        message: `Port ${port} is in use by the current Claude Usage Tracker collector. Setup will restart it.`,
+      };
+    }
+    return {
+      port,
+      status: 'in-use-by-other',
+      message: `Port ${port} is in use by another process. Stop that process or pick a different port.`,
+    };
+  }
+  if (bind.code === 'EACCES') {
+    return { port, status: 'error', message: `Access denied binding port ${port}. Try a port above 1024.` };
+  }
+  return { port, status: 'error', message: `Could not check port ${port}: ${bind.code}` };
 }

@@ -5,7 +5,7 @@ import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
   runInstall, runUninstall, runStartTask, runStopTask,
-  runImportHistorical, isWindows,
+  runImportHistorical, checkPort, isWindows,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -19,10 +19,12 @@ export class DashboardPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly reader: UsageReader;
-  private readonly health: HealthCheckService;
+  private health: HealthCheckService;
   private readonly exporter: ExportService;
   private readonly pricingOverrides: PricingOverrides;
   private readonly autoRefreshSeconds: number;
+  private currentPort: number;
+  private readonly rootOverride: string | undefined;
 
   static show(extensionUri: vscode.Uri) {
     const column = vscode.window.activeTextEditor?.viewColumn;
@@ -54,6 +56,8 @@ export class DashboardPanel {
     const port = cfg.get<number>('collectorPort') ?? 4318;
     this.autoRefreshSeconds = cfg.get<number>('autoRefreshSeconds') ?? 15;
     this.pricingOverrides = cfg.get<PricingOverrides>('pricing') ?? {};
+    this.currentPort = port;
+    this.rootOverride = root;
 
     this.reader = new UsageReader(root);
     this.health = new HealthCheckService(root, `http://127.0.0.1:${port}`);
@@ -94,10 +98,43 @@ export class DashboardPanel {
           }
           return;
         }
-        case 'runInstall':
-          await runInstall(this.extensionUri);
+        case 'runInstall': {
+          const payload = msg.payload as { port?: number } | undefined;
+          const port = Number.isInteger(payload?.port) ? Number(payload!.port) : this.currentPort;
+          const code = await runInstall(this.extensionUri, port);
+          if (code === 0 && port !== this.currentPort) {
+            await vscode.workspace
+              .getConfiguration('claudeUsageTracker')
+              .update('collectorPort', port, vscode.ConfigurationTarget.Global);
+            this.currentPort = port;
+            this.health = new HealthCheckService(this.rootOverride, `http://127.0.0.1:${port}`);
+          }
           await this.refresh();
           return;
+        }
+        case 'getSetupState': {
+          const [task, env] = await Promise.all([
+            this.health.scheduledTaskRegistered(),
+            Promise.resolve(this.health.telemetryEnvConfigured()),
+          ]);
+          this.panel.webview.postMessage({
+            type: 'setupState',
+            payload: {
+              taskRegistered: task,
+              envConfigured: env,
+              alreadyInstalled: !!task && env,
+              currentPort: this.currentPort,
+            },
+          });
+          return;
+        }
+        case 'checkPort': {
+          const requested = (msg.payload as { port?: number } | undefined)?.port;
+          const port = Number.isInteger(requested) ? Number(requested) : this.currentPort;
+          const result = await checkPort(port);
+          this.panel.webview.postMessage({ type: 'portCheck', payload: result });
+          return;
+        }
         case 'runUninstall':
           await runUninstall(this.extensionUri);
           await this.refresh();

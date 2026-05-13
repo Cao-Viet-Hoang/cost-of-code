@@ -57,6 +57,29 @@ export const HEALTH_HTML = `
     </div>
   </div>
 
+  <div class="modal-bg" id="setupModal">
+    <div class="modal">
+      <h3>Setup Claude Usage Tracker</h3>
+      <p>Installs the local OTLP collector and registers it to autostart at logon.</p>
+
+      <div id="setupStatusBox" class="setup-status" hidden></div>
+
+      <div class="setup-port">
+        <label for="setupPortInput">Collector port</label>
+        <div class="setup-port-row">
+          <input type="number" id="setupPortInput" min="1" max="65535" step="1" />
+          <button class="btn btn-secondary btn-sm" id="checkPortBtn">${ICONS.search} Check</button>
+        </div>
+        <div id="setupPortResult" class="setup-port-result" aria-live="polite"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-modal-close="setupModal">Cancel</button>
+        <button class="btn btn-primary" id="runSetupBtn">Run setup</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-bg" id="confirmImportHistorical">
     <div class="modal">
       <h3>Import historical usage?</h3>
