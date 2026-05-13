@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Install the Claude Code Usage Tracker local collector and register it
+  Install the Cost of Code local collector and register it
   to start automatically when the current user logs in.
 
 .DESCRIPTION
@@ -132,7 +132,7 @@ $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" 
 
 Register-ScheduledTask -TaskName $TaskName `
   -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
-  -Description 'Claude Code Usage Tracker - local OpenTelemetry collector' | Out-Null
+  -Description 'Cost of Code - local OpenTelemetry collector' | Out-Null
 Write-OK "Task '$TaskName' registered"
 
 # 6. Configure Claude Code OpenTelemetry settings via ~/.claude/settings.json.
@@ -285,4 +285,4 @@ Write-Host ''
 Write-Host 'Next steps:' -ForegroundColor Cyan
 Write-Host '  1. Open a new terminal (so the env vars are visible to Claude Code).'
 Write-Host '  2. Run "claude" or use Claude Code in VSCode normally.'
-Write-Host '  3. Open the Claude Code Usage Tracker dashboard in VSCode.'
+Write-Host '  3. Open the Cost of Code dashboard in VSCode.'

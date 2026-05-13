@@ -35,7 +35,7 @@ export class DashboardPanel {
     }
     const panel = vscode.window.createWebviewPanel(
       'claudeUsageTracker.dashboard',
-      'Claude Code Usage',
+      'Cost of Code',
       column ?? vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -175,7 +175,7 @@ export class DashboardPanel {
           return;
         }
         case 'openDataFolder': {
-          const root = getPaths().root;
+          const root = getPaths(this.rootOverride).root;
           await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(root));
           return;
         }
@@ -287,7 +287,7 @@ export class DashboardPanel {
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
-<title>Claude Code Usage</title>
+<title>Cost of Code</title>
 <style>${DASHBOARD_CSS}</style>
 </head>
 <body class="theme">

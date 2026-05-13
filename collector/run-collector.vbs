@@ -1,5 +1,5 @@
 ' run-collector.vbs
-' Hidden launcher for the Claude Code Usage Tracker collector.
+' Hidden launcher for the Cost of Code collector.
 '
 ' Usage:
 '   wscript.exe run-collector.vbs "<path-to-node.exe>" "<path-to-collector.js>"

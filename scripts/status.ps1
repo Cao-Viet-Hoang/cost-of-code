@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Show status of the Claude Code Usage Tracker collector and scheduled task.
+  Show status of the Cost of Code collector and scheduled task.
 #>
 
 [CmdletBinding()]

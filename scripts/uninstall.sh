@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code Usage Tracker — Linux uninstaller
+# Cost of Code — Linux uninstaller
 set -euo pipefail
 
 PURGE_DATA=0

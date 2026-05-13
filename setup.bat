@@ -17,20 +17,20 @@ if /i "%~1"=="--no-pause" set "NO_PAUSE=1"
 
 echo.
 echo ==============================================
-echo   Cost Of Code - New Joiner Setup
+echo   Cost of Code - New Joiner Setup
 echo ==============================================
 echo.
 
 REM --- 1) Verify required tools -----------------------------
 where node >nul 2>nul || (
   echo [ERROR] Node.js is not installed or not in PATH.
-  echo         Install Node.js 18+ LTS, then run this file again.
+  echo         Install Node.js 20+ LTS, then run this file again.
   goto :error
 )
 
 where npm >nul 2>nul || (
   echo [ERROR] npm is not installed or not in PATH.
-  echo         Install Node.js 18+ LTS, then run this file again.
+  echo         Install Node.js 20+ LTS, then run this file again.
   goto :error
 )
 
@@ -44,8 +44,8 @@ if "!NODE_MAJOR!"=="" (
   echo [ERROR] Could not detect Node.js version.
   goto :error
 )
-if !NODE_MAJOR! LSS 18 (
-  echo [ERROR] Node.js 18+ is required. Current version: !NODE_VERSION!
+if !NODE_MAJOR! LSS 20 (
+  echo [ERROR] Node.js 20+ is required. Current version: !NODE_VERSION!
   goto :error
 )
 echo.

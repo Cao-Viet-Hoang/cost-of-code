@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code Usage Tracker — Linux installer
+# Cost of Code — Linux installer
 set -euo pipefail
 
 PORT=4318
@@ -66,7 +66,7 @@ if command -v systemctl &>/dev/null && systemctl --user show-environment &>/dev/
   mkdir -p "$SYSTEMD_USER_DIR"
   cat > "$SYSTEMD_USER_DIR/$SERVICE_NAME.service" <<EOF
 [Unit]
-Description=Claude Code Usage Tracker collector
+Description=Cost of Code collector
 
 [Service]
 Type=simple
@@ -193,4 +193,4 @@ echo ""
 echo "Next steps:"
 echo "  1. Open a new terminal so Claude Code picks up the updated settings.json."
 echo "  2. Run 'claude' or use Claude Code in VSCode normally."
-echo "  3. Open the Claude Code Usage Tracker dashboard in VSCode."
+echo "  3. Open the Cost of Code dashboard in VSCode."
