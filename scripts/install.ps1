@@ -25,12 +25,21 @@
 .PARAMETER NoEnv
   Do not set Claude Code OTel environment variables (advanced users who
   prefer to manage their own env).
+
+.PARAMETER NodeExe
+  Full path to a Node.js-compatible binary. If omitted, the script looks
+  for 'node' on PATH. When the VSCode extension calls this script, it
+  passes its own host runtime path (process.execPath) — which on most
+  installations is VSCode's bundled Electron binary. The Electron binary
+  behaves as a pure Node.js when ELECTRON_RUN_AS_NODE=1 is set in its
+  environment; the install wires this env var into every launch point.
 #>
 
 [CmdletBinding()]
 param(
   [string]$SourceDir,
   [int]$Port = 4318,
+  [string]$NodeExe,
   [switch]$NoStart,
   [switch]$NoEnv
 )
@@ -51,14 +60,21 @@ function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-OK($msg)   { Write-Host "    OK  $msg" -ForegroundColor Green }
 function Write-Warn2($m)  { Write-Host "    !!  $m"   -ForegroundColor Yellow }
 
-# 1. Locate node.exe
-Write-Step 'Locating node.exe'
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-  throw 'node.exe not found on PATH. Install Node.js 18+ and try again.'
+# 1. Locate the Node.js-compatible runtime
+Write-Step 'Locating Node.js runtime'
+if ($NodeExe) {
+  if (-not (Test-Path -LiteralPath $NodeExe)) {
+    throw "Provided -NodeExe path does not exist: $NodeExe"
+  }
+  Write-OK "node (provided) = $NodeExe"
+} else {
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) {
+    throw 'No Node.js runtime found. Install Node.js 18+ (or run Setup from the VSCode command palette so the extension can provide its bundled runtime).'
+  }
+  $NodeExe = $nodeCmd.Source
+  Write-OK "node = $NodeExe"
 }
-$NodeExe = $nodeCmd.Source
-Write-OK "node = $NodeExe"
 
 # 2. Create install dirs
 Write-Step "Creating install directories under $InstallRoot"
@@ -82,6 +98,19 @@ foreach ($f in @('collector.js', 'normalizer.js', 'record-session.js', 'package.
   Copy-Item -Path $src -Destination (Join-Path $BinDir $f) -Force
 }
 Write-OK "Installed collector files"
+
+# 3b. Emit a tiny .bat wrapper that pins ELECTRON_RUN_AS_NODE=1 and the
+# resolved $NodeExe path. Anything that needs to "just run node" (the
+# SessionStart hook in particular) calls this wrapper, so the same setup
+# works whether $NodeExe is a real node.exe or VSCode's bundled Electron.
+$RunNodeBat = Join-Path $BinDir 'run-node.bat'
+$batLines = @(
+  '@echo off',
+  'set ELECTRON_RUN_AS_NODE=1',
+  "`"$NodeExe`" %*"
+)
+[System.IO.File]::WriteAllLines($RunNodeBat, $batLines, (New-Object System.Text.UTF8Encoding($false)))
+Write-OK "Wrote $RunNodeBat"
 
 # 4. Stop any existing collector before re-registering
 Write-Step 'Stopping any existing collector'
@@ -197,7 +226,9 @@ if (-not $NoEnv) {
   Write-Step 'Registering SessionStart hook to capture workspace'
 
   $hookJs      = Join-Path $BinDir 'record-session.js'
-  $hookCommand = "node `"$hookJs`""
+  # Go through run-node.bat so the hook works for users who do not have
+  # 'node' on PATH (e.g. those who only use the VSCode Claude Code extension).
+  $hookCommand = "`"$RunNodeBat`" `"$hookJs`""
 
   if (-not $settings.PSObject.Properties.Match('hooks').Count) {
     $settings | Add-Member -MemberType NoteProperty -Name 'hooks' -Value (New-Object PSObject)
