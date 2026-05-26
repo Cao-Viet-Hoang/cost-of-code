@@ -16,6 +16,12 @@ export const DASHBOARD_CSS = `
   --chart-6: 188 95% 43%;
   --chart-7: 322 81% 58%;
   --chart-8: 173 80% 40%;
+
+  /* Per-tool brand colors — used by the provider switch and tool badges so
+     "which AI tool produced this" reads at a glance across the dashboard.
+     Claude → warm orange (Anthropic-ish), Codex → muted green (OpenAI-ish). */
+  --tool-claude: 22 92% 52%;
+  --tool-codex:  158 64% 42%;
 }
 
 body.theme {
@@ -931,4 +937,110 @@ table.data tbody tr:hover .copy-btn { opacity: 1; }
 .donut-slice:hover { opacity: 0.82; }
 .bar-row { transition: background-color 0.15s ease; border-radius: 4px; }
 .bar-row:hover { background: hsl(var(--accent) / 0.4); }
+
+/* ============================== TOOL SWITCH + BADGES ============================== */
+/* Segmented [All | Claude | Codex] control in the header. Mirrors the visual
+   weight of the tabs but uses the tool brand color when active. */
+.tool-switch {
+  display: inline-flex;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: hsl(var(--card));
+}
+.tool-switch button {
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-right: 1px solid hsl(var(--border));
+  transition: background 120ms, color 120ms;
+}
+.tool-switch button:last-child { border-right: 0; }
+.tool-switch button:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
+.tool-switch button .swatch {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: hsl(var(--muted-foreground));
+}
+.tool-switch button[data-tool="claude"] .swatch { background: hsl(var(--tool-claude)); }
+.tool-switch button[data-tool="codex"]  .swatch { background: hsl(var(--tool-codex)); }
+.tool-switch button.active {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+.tool-switch button.active[data-tool="claude"] {
+  background: hsl(var(--tool-claude) / 0.14);
+  color: hsl(var(--tool-claude));
+}
+.tool-switch button.active[data-tool="codex"] {
+  background: hsl(var(--tool-codex) / 0.14);
+  color: hsl(var(--tool-codex));
+}
+
+/* Compact pill used in tables to label which AI tool produced a row. */
+.tool-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px; font-weight: 600;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  letter-spacing: 0.02em;
+}
+.tool-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tool-badge[data-tool="claude"] {
+  background: hsl(var(--tool-claude) / 0.12);
+  color: hsl(var(--tool-claude));
+  border-color: hsl(var(--tool-claude) / 0.28);
+}
+.tool-badge[data-tool="codex"] {
+  background: hsl(var(--tool-codex) / 0.12);
+  color: hsl(var(--tool-codex));
+  border-color: hsl(var(--tool-codex) / 0.28);
+}
+
+/* Two-line KPI breakdown rendered when "All" tools is selected. */
+.kpi-breakdown {
+  display: flex; gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.kpi-breakdown .seg {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-breakdown .seg .swatch {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.kpi-breakdown .seg[data-tool="claude"] .swatch { background: hsl(var(--tool-claude)); }
+.kpi-breakdown .seg[data-tool="codex"]  .swatch { background: hsl(var(--tool-codex)); }
+
+/* "Estimated" badge for Codex-priced rows. */
+.est-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  cursor: help;
+  vertical-align: middle;
+}
 `;

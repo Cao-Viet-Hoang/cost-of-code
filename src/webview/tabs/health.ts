@@ -6,12 +6,25 @@ export const HEALTH_HTML = `
     <div class="card-header">
       <div>
         <h3 class="card-title">Collector status</h3>
-        <p class="card-desc">Local OTLP collector &amp; data folder checks</p>
+        <p class="card-desc">Local OTLP collector &amp; data folder checks (Claude)</p>
       </div>
       <div id="healthSummary"></div>
     </div>
     <div class="card-body">
       <div class="health-grid" id="healthBody"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h3 class="card-title">Codex sessions</h3>
+        <p class="card-desc">OpenAI Codex writes its own JSONL rollouts — no collector needed</p>
+      </div>
+      <div id="codexHealthSummary"></div>
+    </div>
+    <div class="card-body">
+      <div class="health-grid" id="codexHealthBody"></div>
     </div>
   </div>
 
@@ -168,7 +181,64 @@ function renderHealth(d) {
     rows.map(([k, v]) =>
       '<div class="health-row"><span class="health-key">' + escapeHtml(k) + '</span><span class="health-value">' + v + '</span></div>'
     ).join('') + errs + notes;
+
+  renderCodexHealth(d.codexHealth);
+
   attachCopyHandlers();
+}
+
+function renderCodexHealth(c) {
+  const summary = document.getElementById('codexHealthSummary');
+  const body = document.getElementById('codexHealthBody');
+  if (!summary || !body) return;
+  if (!c) {
+    summary.innerHTML = '';
+    body.innerHTML = '';
+    return;
+  }
+  const okBadge  = (label) => '<span class="badge ok"><span class="dot"></span>' + label + '</span>';
+  const warnBadge = (label) => '<span class="badge warn"><span class="dot"></span>' + label + '</span>';
+  const offBadge = (label) => '<span class="badge"><span class="dot"></span>' + label + '</span>';
+
+  if (!c.enabled) {
+    summary.innerHTML = offBadge('Disabled');
+    body.innerHTML =
+      '<div class="hint">Codex tracking is turned off. Enable <code>claudeUsageTracker.includeCodex</code> to read ' +
+      '<code>~/.codex/sessions</code> JSONL rollouts. No collector is required — only file reads.</div>';
+    return;
+  }
+  if (!c.rootExists) {
+    summary.innerHTML = warnBadge('No sessions folder');
+    body.innerHTML =
+      '<div class="health-row"><span class="health-key">Sessions root</span>' +
+        '<span class="health-value mono">' + escapeHtml(c.sessionsRoot) +
+        ' <button class="copy-btn" data-copy="' + escapeHtml(c.sessionsRoot) + '" title="Copy">' + ICONS.copy + '</button></span>' +
+      '</div>' +
+      '<div class="hint warn" style="margin-top:8px">Folder does not exist yet. ' +
+      'Run the Codex desktop app at least once to create it, or set ' +
+      '<code>claudeUsageTracker.codexSessionsFolder</code> to a different path.</div>';
+    attachCopyHandlers();
+    return;
+  }
+  const summaryBadge = c.sessionFiles > 0
+    ? okBadge(c.sessionFiles + ' file' + (c.sessionFiles === 1 ? '' : 's'))
+    : warnBadge('no rollouts yet');
+  summary.innerHTML = summaryBadge;
+
+  const rows = [
+    ['Sessions root',  '<span class="health-value mono">' + escapeHtml(c.sessionsRoot) +
+      ' <button class="copy-btn" data-copy="' + escapeHtml(c.sessionsRoot) + '" title="Copy">' + ICONS.copy + '</button></span>'],
+    ['Rollout files',  '<span class="health-value">' + fmt(c.sessionFiles) + '</span>'],
+    ['Last write',     '<span class="health-value" title="' + escapeHtml(fmtTimeFull(c.lastWriteAt)) + '">' + fmtRel(c.lastWriteAt) + '</span>'],
+    ['Models seen',    c.models && c.models.length ? c.models.map(m => '<span class="tag">' + escapeHtml(m) + '</span>').join('') : '<span class="muted">none</span>'],
+    ['Providers',      c.providers && c.providers.length ? c.providers.map(p => '<span class="tag">' + escapeHtml(p) + '</span>').join('') : '<span class="muted">—</span>'],
+  ];
+  body.innerHTML = rows.map(([k, v]) =>
+    '<div class="health-row"><span class="health-key">' + escapeHtml(k) + '</span><span class="health-value">' + v + '</span></div>'
+  ).join('') +
+  '<div class="hint" style="margin-top:10px"><strong>No collector needed.</strong> ' +
+  'Codex Desktop writes JSONL rollouts directly. Costs shown are estimates from OpenAI list prices — ' +
+  'override via <code>claudeUsageTracker.codexPricing</code> if you bill against Azure.</div>';
 }
 
 function renderStatusDetail(d) {

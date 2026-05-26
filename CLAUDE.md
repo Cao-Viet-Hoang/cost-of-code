@@ -8,16 +8,19 @@ file in the **same commit** as the change.
 
 ## What this project is
 
-A local-first VSCode extension that visualizes Claude Code token usage and
-estimated cost. Three pieces:
+A local-first VSCode extension that visualizes token usage and estimated cost
+for both **Claude Code** and **OpenAI Codex Desktop**. Three pieces:
 
-- `collector/` — zero-dependency Node.js OTLP/HTTP receiver. Writes raw
-  payloads and normalized usage records as JSONL under
+- `collector/` — zero-dependency Node.js OTLP/HTTP receiver for Claude. Writes
+  raw payloads and normalized usage records as JSONL under
   `~/.claude/usage-tracker/`.
 - `scripts/` — Windows (`*.ps1`) and Linux (`*.sh`) install / uninstall /
   status helpers, plus `import-projects-history.js` and `build-icon.js`.
 - `src/` — VSCode extension (TypeScript). Registers commands, renders the
-  dashboard webview, and bridges to the platform scripts.
+  dashboard webview, and bridges to the platform scripts. Includes a
+  read-only Codex session reader (`src/codex/`) that parses
+  `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` directly — Codex needs **no
+  collector** because the Codex Desktop app writes its own session JSONLs.
 
 No cloud, no account, no remote server. Privacy-safe by default — only token
 counts, model id, request/session ids, estimated cost, and timing are stored.
@@ -37,13 +40,16 @@ scripts/          install / uninstall / status (.ps1 + .sh), build-icon, import
 src/              VSCode extension TypeScript sources
   extension.ts        Command registration entry point
   DashboardPanel.ts   Webview with 6 tabs
-  usageReader.ts      JSONL aggregation
+  usageReader.ts      JSONL aggregation (merges Claude + Codex into one stream)
   healthCheck.ts      Collector health probe
   exportService.ts    JSONL/CSV export
   installer.ts        Bridges commands to platform scripts
-  paths.ts            ~/.claude/usage-tracker path helpers
-  pricing.ts          Per-model pricing
+  paths.ts            ~/.claude/usage-tracker + ~/.codex/sessions path helpers
+  pricing.ts          Per-model Claude pricing
   types.ts            Shared types
+  codex/              Codex session-JSONL reader + pricing
+    sessionReader.ts  Walks ~/.codex/sessions and emits UsageRecord
+    pricing.ts        OpenAI list prices (overridable for Azure billing)
   webview/            Webview assets
 media/            Icon source + generated icon
 .claude/          Project-scoped Claude Code configuration (agents, skills, commands, settings)
@@ -108,15 +114,27 @@ be in any language; code artifacts cannot.
 ## Things that look like bugs but aren't
 
 - The configuration key prefix is `claudeUsageTracker.*` even though the
-  display name is "Cost of Code". This is intentional for backward
-  compatibility with existing user settings — do not rename it without
-  planning a migration.
+  display name is "Cost of Code" and we now also track Codex. This is
+  intentional for backward compatibility with existing user settings — do not
+  rename it without planning a migration.
 - The extension publisher id is `cost-of-code` (kebab); the command category
   is `Cost of Code` (display). Both are correct.
 - `~/.claude/settings.json` is **merged**, not overwritten, by the installer.
   Other keys in that file belong to the user — never clobber them.
 - OTLP/JSON only (no protobuf). Setup forces
   `OTEL_EXPORTER_OTLP_PROTOCOL=http/json`.
+- Codex costs are labeled "est" because we price against OpenAI's public list
+  rates; Codex via Azure deployments may differ. Users can override via the
+  `claudeUsageTracker.codexPricing` setting.
+- Codex's `input_tokens` *includes* `cached_input_tokens`. The reader
+  subtracts the cached portion before pricing, then prices the cached portion
+  at the cached rate — keep this split in mind when changing pricing logic.
+- Codex `output_tokens` already includes `reasoning_output_tokens`; the
+  reasoning count is stored separately for display only, not added on top.
+- Codex records map onto Claude-shaped `UsageRecord` with
+  `cache_read_tokens = cached_input_tokens` and `cache_creation_tokens = 0`.
+  The Cache tab is Claude-specific because cache_creation has no Codex
+  analogue.
 
 ## Common workflows
 
@@ -125,6 +143,8 @@ be in any language; code artifacts cannot.
 | Add a new dashboard command           | Register in `src/extension.ts` + declare in `package.json` `contributes.commands` |
 | Add a new config setting              | Declare in `package.json` `contributes.configuration` + read via `vscode.workspace.getConfiguration('claudeUsageTracker')` |
 | Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts` |
+| Add a new Codex model price           | Update `src/codex/pricing.ts` `DEFAULT_TABLE` (more specific prefixes first) |
+| Change Codex parsing                  | Update `src/codex/sessionReader.ts`; keep token-mapping invariant (see "Things that look like bugs") |
 | Change install behavior               | Update **both** `scripts/install.ps1` and `scripts/install.sh`, then `src/installer.ts` if the bridge signature changed |
 | Ship a release                        | Bump `version` in `package.json` + `CHANGELOG.md`, then `npm run package` |
 

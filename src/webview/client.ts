@@ -41,6 +41,9 @@ window.addEventListener('resize', () => {
 document.querySelectorAll('.preset-group button').forEach(b => {
   b.addEventListener('click', () => applyPreset(b.getAttribute('data-preset')));
 });
+document.querySelectorAll('#toolSwitch button').forEach(b => {
+  b.addEventListener('click', () => applyToolFilter(b.getAttribute('data-tool') || ''));
+});
 document.getElementById('refreshBtn').addEventListener('click', refresh);
 document.getElementById('toggleAuto').addEventListener('click', toggleAuto);
 document.getElementById('applyFilter').addEventListener('click', () => {

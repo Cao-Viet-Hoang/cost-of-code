@@ -109,6 +109,35 @@
               }
             }
           }
+        },
+        "claudeUsageTracker.includeCodex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include OpenAI Codex usage (read from ~/.codex/sessions JSONL rollouts) alongside Claude in the dashboard. Codex needs no collector — only file reads."
+        },
+        "claudeUsageTracker.codexSessionsFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Override the Codex sessions folder. Empty means '~/.codex/sessions'."
+        },
+        "claudeUsageTracker.codexPricing": {
+          "type": "object",
+          "default": {},
+          "description": "Per-model pricing overrides for Codex cost estimates. Keys are model-name substrings (e.g. \"gpt-5\"); values are partial { input, cachedInput, output } per 1M tokens. Codex via Azure deployments may differ from OpenAI list prices.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "cachedInput": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              }
+            }
+          }
         }
       }
     }

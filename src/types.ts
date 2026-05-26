@@ -1,5 +1,17 @@
+/**
+ * Which AI coding tool produced this record. Used as the top-level discriminator
+ * in the dashboard (segmented "All / Claude / Codex" control) and to gate
+ * Claude-specific UI like the Cache tab.
+ *
+ * Kept deliberately separate from `source_type` (Claude OTLP source category)
+ * and `query_source` (Claude OTLP query origin) to avoid overloading.
+ */
+export type Tool = 'claude' | 'codex';
+
 export interface UsageRecord {
   schema_version: number;
+  /** AI coding tool that emitted this record. Defaults to 'claude' for legacy records. */
+  tool?: Tool;
   timestamp: string;
   event_id?: string;
   event_key?: string;
@@ -20,6 +32,10 @@ export interface UsageRecord {
   terminal_type?: string;
   user_type?: string;
   scope_name?: string;
+  /** Codex-only: provider behind the model (e.g. "azure", "openai"). */
+  model_provider?: string;
+  /** Codex-only: reasoning tokens (a subset of output_tokens). */
+  reasoning_output_tokens?: number;
 }
 
 export interface CollectorStatus {
@@ -63,6 +79,8 @@ export interface SessionAggregate extends AggregatedTotals {
   durationMs: number;
   models: string[];
   workspace?: string;
+  /** Set of tools this session contains. Almost always one element. */
+  tools: Tool[];
 }
 
 export interface ModelAggregate extends AggregatedTotals {
@@ -80,6 +98,17 @@ export interface WorkspaceAggregate extends AggregatedTotals {
 
 export interface SourceAggregate extends AggregatedTotals {
   source: string;
+}
+
+/** Per-tool aggregate (Claude vs Codex). */
+export interface ToolAggregate extends AggregatedTotals {
+  tool: Tool;
+}
+
+/** Compact split used for KPI tooltips and the header chip. */
+export interface ToolBreakdown {
+  claude: AggregatedTotals;
+  codex: AggregatedTotals;
 }
 
 export interface HourlyBucket {
@@ -104,6 +133,8 @@ export interface RequestDetail {
   durationMs: number;
   requestId?: string;
   querySource?: string;
+  tool?: Tool;
+  reasoningOutputTokens?: number;
 }
 
 export interface OverviewSnapshot extends AggregatedTotals {
@@ -191,4 +222,23 @@ export interface FilterOptions {
   querySource?: string;
   workspace?: string;
   search?: string;
+  /** Limit the result set to records emitted by one tool. Omit for "All". */
+  tool?: Tool;
+}
+
+/**
+ * Snapshot of the local Codex sessions folder so the Health tab can report
+ * presence/freshness without spinning up a collector.
+ */
+export interface CodexHealth {
+  enabled: boolean;
+  sessionsRoot: string;
+  rootExists: boolean;
+  sessionFiles: number;
+  lastWriteAt: string | null;
+  lastSessionId: string | null;
+  /** Distinct models observed across parsed records. */
+  models: string[];
+  /** Distinct providers observed (e.g. "azure", "openai"). */
+  providers: string[];
 }

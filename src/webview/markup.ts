@@ -21,6 +21,11 @@ export function buildBodyHtml(): string {
       </div>
     </div>
     <div class="header-right">
+      <div class="tool-switch" role="tablist" aria-label="Filter by AI tool" id="toolSwitch">
+        <button data-tool="" class="active" title="Show data from all AI tools">All</button>
+        <button data-tool="claude" title="Claude Code only"><span class="swatch"></span>Claude</button>
+        <button data-tool="codex" title="OpenAI Codex only"><span class="swatch"></span>Codex</button>
+      </div>
       <div class="status-pill" id="statusPill" data-state="unknown">
         <span class="dot"></span>
         <span class="status-text">Checking…</span>

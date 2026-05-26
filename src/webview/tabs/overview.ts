@@ -77,6 +77,7 @@ export const OVERVIEW_HTML = `
       <div class="card-body table-wrap">
         <table class="data" id="recentSessionsTable">
           <thead><tr>
+            <th>Tool</th>
             <th>Session</th>
             <th>Workspace</th>
             <th class="num">Cost</th>
@@ -123,6 +124,27 @@ function renderOverview(d) {
   const costPerReq = t.requests > 0 ? t.cost / t.requests : 0;
   const tokensPerReq = t.requests > 0 ? t.totalTokensWithCache / t.requests : 0;
 
+  // Per-tool breakdown — only rendered when "All" is selected and both tools
+  // actually have data, so the KPI cards don't grow taller for single-tool users.
+  const todayBrk = d.todayToolBreakdown;
+  const rangeBrk = d.toolBreakdown;
+  const showSplit = (toolFilter === '') && todayBrk && rangeBrk &&
+    (todayBrk.codex.requests > 0 || rangeBrk.codex.requests > 0) &&
+    (todayBrk.claude.requests > 0 || rangeBrk.claude.requests > 0);
+
+  const todayCostSplit = showSplit ? [
+    { tool: 'claude', label: 'Claude', value: fmtCostShort(todayBrk.claude.cost), title: fmtCost(todayBrk.claude.cost) },
+    { tool: 'codex',  label: 'Codex',  value: fmtCostShort(todayBrk.codex.cost),  title: fmtCost(todayBrk.codex.cost) + ' · estimated from OpenAI list price' },
+  ] : null;
+  const rangeCostSplit = showSplit ? [
+    { tool: 'claude', label: 'Claude', value: fmtCostShort(rangeBrk.claude.cost), title: fmtCost(rangeBrk.claude.cost) },
+    { tool: 'codex',  label: 'Codex',  value: fmtCostShort(rangeBrk.codex.cost),  title: fmtCost(rangeBrk.codex.cost) + ' · estimated from OpenAI list price' },
+  ] : null;
+  const todayTokenSplit = showSplit ? [
+    { tool: 'claude', label: 'Claude', value: fmt(todayBrk.claude.totalTokensWithCache) },
+    { tool: 'codex',  label: 'Codex',  value: fmt(todayBrk.codex.totalTokensWithCache) },
+  ] : null;
+
   const cards = [
     kpi({
       label: "Today's cost",
@@ -134,6 +156,7 @@ function renderOverview(d) {
       colorVar: '--chart-2',
       sparkline: sparkCost.length > 1 ? sparkCost : null,
       delta: Number.isFinite(costPct) ? { pct: costPct, dir: costPct > 1 ? 'up' : costPct < -1 ? 'down' : 'flat', tooltip: 'vs 7-day avg: ' + fmtCost(prevAvgCost), invertColor: true } : null,
+      breakdown: todayCostSplit,
     }),
     kpi({
       label: 'Tokens today',
@@ -145,6 +168,7 @@ function renderOverview(d) {
       colorVar: '--chart-1',
       sparkline: sparkTokens.length > 1 ? sparkTokens : null,
       delta: Number.isFinite(tokenPct) ? { pct: tokenPct, dir: tokenPct > 1 ? 'up' : tokenPct < -1 ? 'down' : 'flat', tooltip: 'vs 7-day avg: ' + fmt(prevAvgTokens) } : null,
+      breakdown: todayTokenSplit,
     }),
     kpi({
       label: 'Cache ratio (today)',
@@ -164,6 +188,7 @@ function renderOverview(d) {
       accent: 'accent-4',
       colorVar: '--chart-4',
       sparkline: sparkReqs.length > 1 ? sparkReqs : null,
+      breakdown: rangeCostSplit,
     }),
   ];
   renderKpis('overviewCards', cards);
@@ -213,10 +238,13 @@ function renderOverview(d) {
   const tbody = document.querySelector('#recentSessionsTable tbody');
   const top = (d.sessions || []).slice(0, 5);
   if (top.length === 0) {
-    tbody.innerHTML = emptyCell(6, 'No sessions yet.', 'users');
+    tbody.innerHTML = emptyCell(7, 'No sessions yet.', 'users');
   } else {
-    tbody.innerHTML = top.map(s => (
+    tbody.innerHTML = top.map(s => {
+      const tools = (s.tools && s.tools.length > 0) ? s.tools : ['claude'];
+      return (
       '<tr>' +
+        '<td>' + tools.map(t => toolBadge(t)).join(' ') + '</td>' +
         '<td><span class="session-id" title="' + escapeHtml(s.sessionId || '') + '">' +
           escapeHtml((s.sessionId || '').slice(0, 8)) + '…</span>' +
           ' <button class="copy-btn" data-copy="' + escapeHtml(s.sessionId || '') + '" title="Copy id">' + ICONS.copy + '</button>' +
@@ -227,7 +255,8 @@ function renderOverview(d) {
         '<td class="num">' + fmt(s.requests) + '</td>' +
         '<td title="' + escapeHtml(fmtTimeFull(s.startTime)) + '">' + fmtRel(s.startTime) + '</td>' +
       '</tr>'
-    )).join('');
+      );
+    }).join('');
   }
   attachCopyHandlers();
 }

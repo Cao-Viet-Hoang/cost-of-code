@@ -34,3 +34,15 @@ export function getPaths(rootOverride?: string): TrackerPaths {
 export function todayDateStr(d?: Date): string {
   return (d ?? new Date()).toISOString().slice(0, 10);
 }
+
+/**
+ * Where Codex Desktop writes its session JSONL rollouts. Each session is a
+ * separate `YYYY/MM/DD/rollout-<timestamp>-<session-id>.jsonl` file, appended
+ * to in real time. We never write here — the reader is read-only.
+ */
+export function getCodexSessionsRoot(override?: string): string {
+  if (override && override.length > 0) {
+    return override;
+  }
+  return path.join(os.homedir(), '.codex', 'sessions');
+}

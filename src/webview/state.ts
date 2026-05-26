@@ -15,6 +15,21 @@ const PRESETS = [
   { id: 'custom',  label: 'Custom'     },
 ];
 let currentPreset = 'month';
+/* '' = all tools, 'claude' or 'codex' for single-tool view */
+let toolFilter = '';
+
+function applyToolFilter(tool) {
+  toolFilter = tool || '';
+  document.querySelectorAll('#toolSwitch button').forEach(b => {
+    b.classList.toggle('active', (b.getAttribute('data-tool') || '') === toolFilter);
+  });
+  // The Source filter is Claude-specific; hide it for Codex-only mode.
+  const srcField = document.getElementById('filterSource');
+  if (srcField && srcField.parentElement) {
+    srcField.parentElement.style.display = toolFilter === 'codex' ? 'none' : '';
+  }
+  refresh();
+}
 
 function presetRange(id) {
   const today = new Date();
@@ -50,9 +65,10 @@ function readFilter() {
   if (s) f.startDate = s;
   if (e) f.endDate = e;
   if (m) f.model = m;
-  if (src) f.querySource = src;
+  if (src && toolFilter !== 'codex') f.querySource = src;
   if (ws) f.workspace = ws;
   if (q) f.search = q;
+  if (toolFilter) f.tool = toolFilter;
   return f;
 }
 function refresh() {

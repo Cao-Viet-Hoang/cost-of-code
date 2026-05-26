@@ -2,6 +2,14 @@ import { ICONS } from '../icons';
 
 export const CACHE_HTML = `
 <section class="panel" data-panel="cache">
+  <div class="hint" id="cacheCodexBanner" hidden>
+    <strong>Cache view shows Claude data.</strong>
+    Codex models bill cached input tokens at a discounted rate (already factored into Codex
+    cost estimates), but the cache-creation / cache-read distinction is Claude-specific.
+    Switch to <strong>Claude</strong> or <strong>All</strong> in the header to see cache
+    savings.
+  </div>
+  <div id="cacheBody">
   <div class="kpis" id="cacheCards"></div>
 
   <div class="card chart-card">
@@ -43,12 +51,26 @@ export const CACHE_HTML = `
     <strong>Estimated savings</strong> use Anthropic list prices (cache-read ~10% of fresh input) and the
     <em>cache_read_tokens</em> on each record. This is an estimate for trend-watching, <em>not</em> billing.
     Override prices via the <code>claudeUsageTracker.pricing</code> setting if Anthropic changes them.
+    Codex's cached-input discount is applied separately inside its cost estimate.
   </p>
+  </div>
 </section>
 `;
 
 export const CACHE_JS = `
 function renderCache(d) {
+  const banner = document.getElementById('cacheCodexBanner');
+  const body = document.getElementById('cacheBody');
+  // Codex-only view: cache savings are baked into per-turn costs, not surfaced
+  // as a separate trend — show a banner and skip the rest.
+  if (toolFilter === 'codex') {
+    if (banner) banner.hidden = false;
+    if (body) body.hidden = true;
+    return;
+  }
+  if (banner) banner.hidden = true;
+  if (body) body.hidden = false;
+
   const tbody = document.querySelector('#cacheTable tbody');
   const empty = document.getElementById('cacheChartEmpty');
   const svg   = document.getElementById('cacheRatioSvg');

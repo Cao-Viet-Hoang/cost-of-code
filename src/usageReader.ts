@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getPaths } from './paths';
 import { savedByCacheRead, hypotheticalInputCost, type PricingOverrides } from './pricing';
+import { CodexSessionReader } from './codex/sessionReader';
+import type { CodexPricingOverrides } from './codex/pricing';
 import type {
   UsageRecord,
   DailyAggregate,
@@ -15,7 +17,17 @@ import type {
   FilterOptions,
   CacheBreakdownByDay,
   CacheSavingsSummary,
+  Tool,
+  ToolAggregate,
+  ToolBreakdown,
+  CodexHealth,
 } from './types';
+
+export interface CodexOptions {
+  enabled: boolean;
+  sessionsRoot?: string;
+  pricing?: CodexPricingOverrides;
+}
 
 const DATE_RE = /^(\d{4}-\d{2}-\d{2})\.usage\.jsonl$/;
 
@@ -84,6 +96,9 @@ function recordPasses(r: UsageRecord, f: FilterOptions): boolean {
   if (f.workspace && r.workspace !== f.workspace) {
     return false;
   }
+  if (f.tool && (r.tool ?? 'claude') !== f.tool) {
+    return false;
+  }
   if (f.search) {
     const q = f.search.toLowerCase();
     const hay = [
@@ -123,11 +138,25 @@ export class UsageReader {
   private sessionMetaCache: Map<string, string> | null = null;
   private sessionMetaMtime = 0;
   private sessionMetaSize = 0;
+  private readonly codexEnabled: boolean;
+  private readonly codex: CodexSessionReader | null;
 
-  constructor(rootOverride?: string) {
+  constructor(rootOverride?: string, codex?: CodexOptions) {
     const p = getPaths(rootOverride);
     this.usageDir = p.usage;
     this.sessionMetaFile = p.sessionMeta;
+    this.codexEnabled = !!codex?.enabled;
+    this.codex = this.codexEnabled
+      ? new CodexSessionReader(codex?.sessionsRoot, codex?.pricing)
+      : null;
+  }
+
+  /** Snapshot of the Codex sessions folder for the Health tab. */
+  codexHealth(): CodexHealth {
+    if (this.codex) {
+      return this.codex.health(true);
+    }
+    return new CodexSessionReader().health(false);
   }
 
   /**
@@ -256,27 +285,49 @@ export class UsageReader {
       ? { ...filter, workspace: normalizeWorkspace(filter.workspace) }
       : filter;
 
-    for (const d of dates) {
-      if (startD && d < startD) { continue; }
-      if (endD && d > endD) { continue; }
+    // Claude records — gated when tool=codex.
+    if (normalizedFilter.tool !== 'codex') {
+      for (const d of dates) {
+        if (startD && d < startD) { continue; }
+        if (endD && d > endD) { continue; }
 
-      const records = this.loadFileRecords(d);
-      for (const rec of records) {
+        const records = this.loadFileRecords(d);
+        for (const rec of records) {
+          const key = rec.event_key || `${rec.session_id || ''}|${rec.request_id || ''}|${rec.timestamp}`;
+          if (seen.has(key)) { continue; }
+          seen.add(key);
+
+          // Backfill workspace from the SessionStart-hook side file when the
+          // record itself doesn't carry one (Claude Code's OTLP currently does
+          // not include cwd). Filtering by workspace happens AFTER backfill so
+          // the workspace dropdown actually works.
+          //
+          // Whatever source the workspace comes from, run it through
+          // normalizeWorkspace so downstream aggregations see one canonical key
+          // per directory (e.g. "C:\foo" and "c:\foo" collapse).
+          let effective = rec;
+          const rawWs = rec.workspace || (rec.session_id ? sessionMeta.get(rec.session_id) : undefined);
+          const ws = normalizeWorkspace(rawWs);
+          const needsTool = !rec.tool;
+          if (ws !== rec.workspace || needsTool) {
+            effective = { ...rec, workspace: ws, tool: rec.tool ?? 'claude' };
+          }
+
+          if (!recordPasses(effective, normalizedFilter)) { continue; }
+          yield effective;
+        }
+      }
+    }
+
+    // Codex records — gated when tool=claude or codex disabled.
+    if (this.codex && normalizedFilter.tool !== 'claude') {
+      for (const rec of this.codex.iterateRecords()) {
         const key = rec.event_key || `${rec.session_id || ''}|${rec.request_id || ''}|${rec.timestamp}`;
         if (seen.has(key)) { continue; }
         seen.add(key);
 
-        // Backfill workspace from the SessionStart-hook side file when the
-        // record itself doesn't carry one (Claude Code's OTLP currently does
-        // not include cwd). Filtering by workspace happens AFTER backfill so
-        // the workspace dropdown actually works.
-        //
-        // Whatever source the workspace comes from, run it through
-        // normalizeWorkspace so downstream aggregations see one canonical key
-        // per directory (e.g. "C:\foo" and "c:\foo" collapse).
         let effective = rec;
-        const rawWs = rec.workspace || (rec.session_id ? sessionMeta.get(rec.session_id) : undefined);
-        const ws = normalizeWorkspace(rawWs);
+        const ws = normalizeWorkspace(rec.workspace);
         if (ws !== rec.workspace) {
           effective = { ...rec, workspace: ws };
         }
@@ -314,6 +365,7 @@ export class UsageReader {
       startTime: string;
       endTime: string;
       _models: Set<string>;
+      _tools: Set<Tool>;
       workspace?: string;
     }
     const map = new Map<string, Acc>();
@@ -326,6 +378,7 @@ export class UsageReader {
           startTime: r.timestamp,
           endTime: r.timestamp,
           _models: new Set(),
+          _tools: new Set(),
           workspace: r.workspace,
           ...emptyTotals(),
         };
@@ -333,14 +386,16 @@ export class UsageReader {
       }
       add(acc, r);
       if (r.model) { acc._models.add(r.model); }
+      acc._tools.add(r.tool ?? 'claude');
       if (r.timestamp < acc.startTime) { acc.startTime = r.timestamp; }
       if (r.timestamp > acc.endTime)   { acc.endTime = r.timestamp; }
       if (!acc.workspace && r.workspace) { acc.workspace = r.workspace; }
     }
     return Array.from(map.values())
-      .map(({ _models, ...rest }) => ({
+      .map(({ _models, _tools, ...rest }) => ({
         ...rest,
         models: Array.from(_models),
+        tools: Array.from(_tools),
         durationMs: new Date(rest.endTime).getTime() - new Date(rest.startTime).getTime(),
       }))
       .sort((a, b) => b.endTime.localeCompare(a.endTime));
@@ -362,6 +417,8 @@ export class UsageReader {
         durationMs: r.duration_ms || 0,
         requestId: r.request_id,
         querySource: r.query_source,
+        tool: r.tool ?? 'claude',
+        reasoningOutputTokens: r.reasoning_output_tokens,
       });
     }
     return out.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -440,6 +497,35 @@ export class UsageReader {
       add(acc, r);
     }
     return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
+  }
+
+  /** Aggregates split by AI tool (claude vs codex). */
+  tools(filter: FilterOptions = {}): ToolAggregate[] {
+    const map = new Map<Tool, ToolAggregate>();
+    for (const r of this.iterateRecords(filter)) {
+      const t: Tool = r.tool ?? 'claude';
+      let acc = map.get(t);
+      if (!acc) {
+        acc = { tool: t, ...emptyTotals() };
+        map.set(t, acc);
+      }
+      add(acc, r);
+    }
+    return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
+  }
+
+  /**
+   * Compact { claude, codex } breakdown used by KPI tooltips and the header
+   * chip. Always returns both keys with zeroed totals if the tool has no data.
+   */
+  toolBreakdown(filter: FilterOptions = {}): ToolBreakdown {
+    const claude = emptyTotals();
+    const codex = emptyTotals();
+    for (const r of this.iterateRecords(filter)) {
+      const t: Tool = r.tool ?? 'claude';
+      add(t === 'codex' ? codex : claude, r);
+    }
+    return { claude, codex };
   }
 
   /**

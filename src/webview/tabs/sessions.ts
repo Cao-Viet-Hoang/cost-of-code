@@ -47,6 +47,7 @@ function renderSessions(d) {
 
   thead.innerHTML = '<tr>' +
     '<th style="width:24px"></th>' +
+    '<th style="width:78px">Tool</th>' +
     sortableHeader('sessions', 'sessionId',     'Session') +
     sortableHeader('sessions', 'workspace',     'Workspace') +
     sortableHeader('sessions', 'startTime',     'Started') +
@@ -96,9 +97,16 @@ function renderSessions(d) {
     const pct = (s.cost / max) * 100;
     const isOpen = expanded.has(s.sessionId);
     const chevron = '<span class="chevron-cell" style="display:inline-block;transition:transform 120ms;transform:rotate(' + (isOpen ? '90' : '0') + 'deg)">' + ICONS.chevron + '</span>';
+    const tools = (s.tools && s.tools.length > 0) ? s.tools : ['claude'];
+    const toolCell = tools.map(t => toolBadge(t)).join(' ');
+    const hasCodex = tools.indexOf('codex') !== -1;
+    const costCell = fmtCost(s.cost) + (hasCodex && tools.length === 1
+      ? '<span class="est-badge" title="Estimated from OpenAI list price">est</span>'
+      : '');
     const row =
       '<tr class="expandable" data-expand="' + escapeHtml(s.sessionId) + '">' +
         '<td>' + chevron + '</td>' +
+        '<td>' + toolCell + '</td>' +
         '<td><span class="session-id" title="' + escapeHtml(s.sessionId || '') + '">' +
           escapeHtml((s.sessionId || '').slice(0, 8)) + '…</span>' +
           ' <button class="copy-btn" data-copy="' + escapeHtml(s.sessionId || '') + '" title="Copy id">' + ICONS.copy + '</button>' +
@@ -106,7 +114,7 @@ function renderSessions(d) {
         '<td title="' + escapeHtml(s.workspace || '') + '">' + escapeHtml(shortenWorkspace(s.workspace)) + '</td>' +
         '<td title="' + escapeHtml(fmtTimeFull(s.startTime)) + '">' + fmtTime(s.startTime) + '</td>' +
         '<td class="num">' + fmtMs(s.durationMs) + '</td>' +
-        '<td class="num bar-cell">' + fmtCost(s.cost) +
+        '<td class="num bar-cell">' + costCell +
           '<span class="bar" style="width:' + pct + '%"></span>' +
         '</td>' +
         '<td>' + (s.models || []).map(m => '<span class="tag">' + escapeHtml(m) + '</span>').join('') + '</td>' +
@@ -117,40 +125,54 @@ function renderSessions(d) {
     let detail = '';
     if (isOpen) {
       const reqs = requestCache[s.sessionId];
+      // colspan = expand + tool + session + workspace + started + duration + cost + models + tokens + reqs = 10
+      const colspan = 10;
       if (!reqs) {
         detail =
-          '<tr class="detail-row"><td colspan="9">' +
+          '<tr class="detail-row"><td colspan="' + colspan + '">' +
             '<div class="empty" style="padding:16px"><p class="muted">Loading requests…</p></div>' +
           '</td></tr>';
       } else if (reqs.length === 0) {
         detail =
-          '<tr class="detail-row"><td colspan="9">' +
+          '<tr class="detail-row"><td colspan="' + colspan + '">' +
             '<div class="empty" style="padding:16px"><p class="muted">No request-level data for this session.</p></div>' +
           '</td></tr>';
       } else {
+        // Codex rows have no Source / cache_creation analogue — show "—" instead
+        // of hiding the columns so the table shape stays stable across mixed sessions.
         detail =
-          '<tr class="detail-row"><td colspan="9"><div class="table-wrap" style="padding:0 14px 12px">' +
+          '<tr class="detail-row"><td colspan="' + colspan + '"><div class="table-wrap" style="padding:0 14px 12px">' +
             '<table class="data" style="margin-top:4px"><thead><tr>' +
-              '<th>Time</th><th>Model</th><th class="num">Input</th><th class="num">Output</th>' +
+              '<th>Tool</th><th>Time</th><th>Model</th>' +
+              '<th class="num">Input</th><th class="num">Output</th>' +
               '<th class="num">Cache read</th><th class="num">Cache create</th>' +
-              '<th class="num">Cost</th><th class="num">Duration</th><th>Source</th><th>Request</th>' +
+              '<th class="num">Reasoning</th>' +
+              '<th class="num">Cost</th><th class="num">Duration</th>' +
+              '<th>Source</th><th>Request</th>' +
             '</tr></thead><tbody>' +
-              reqs.map(r => (
+              reqs.map(r => {
+                const isCodex = (r.tool || 'claude') === 'codex';
+                return (
                 '<tr>' +
+                  '<td>' + toolBadge(r.tool) + '</td>' +
                   '<td title="' + escapeHtml(fmtTimeFull(r.timestamp)) + '">' + fmtTime(r.timestamp) + '</td>' +
                   '<td>' + escapeHtml(r.model || '—') + '</td>' +
                   '<td class="num">' + fmt(r.inputTokens) + '</td>' +
                   '<td class="num">' + fmt(r.outputTokens) + '</td>' +
                   '<td class="num">' + fmt(r.cacheReadTokens) + '</td>' +
-                  '<td class="num">' + fmt(r.cacheCreationTokens) + '</td>' +
-                  '<td class="num">' + fmtCost(r.cost) + '</td>' +
-                  '<td class="num">' + fmtMs(r.durationMs) + '</td>' +
+                  '<td class="num">' + (isCodex ? '—' : fmt(r.cacheCreationTokens)) + '</td>' +
+                  '<td class="num">' + (isCodex ? fmt(r.reasoningOutputTokens || 0) : '—') + '</td>' +
+                  '<td class="num">' + fmtCost(r.cost) +
+                    (isCodex ? '<span class="est-badge" title="Estimated from OpenAI list price">est</span>' : '') +
+                  '</td>' +
+                  '<td class="num">' + (isCodex ? '—' : fmtMs(r.durationMs)) + '</td>' +
                   '<td>' + escapeHtml(r.querySource || '—') + '</td>' +
                   '<td><span class="mono-cell" title="' + escapeHtml(r.requestId || '') + '">' +
                     escapeHtml((r.requestId || '').slice(0, 10)) + (r.requestId && r.requestId.length > 10 ? '…' : '') +
                   '</span></td>' +
                 '</tr>'
-              )).join('') +
+                );
+              }).join('') +
             '</tbody></table>' +
           '</div></td></tr>';
       }

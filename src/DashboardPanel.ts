@@ -10,6 +10,7 @@ import {
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
+import type { CodexPricingOverrides } from './codex/pricing';
 import { DASHBOARD_CSS } from './webview/styles';
 import { buildBodyHtml } from './webview/markup';
 import { buildClientJs } from './webview/client';
@@ -60,7 +61,15 @@ export class DashboardPanel {
     this.currentPort = port;
     this.rootOverride = root;
 
-    this.reader = new UsageReader(root);
+    const codexEnabled = cfg.get<boolean>('includeCodex') ?? true;
+    const codexSessionsFolder = cfg.get<string>('codexSessionsFolder') || undefined;
+    const codexPricing = cfg.get<CodexPricingOverrides>('codexPricing') ?? {};
+
+    this.reader = new UsageReader(root, {
+      enabled: codexEnabled,
+      sessionsRoot: codexSessionsFolder,
+      pricing: codexPricing,
+    });
     this.health = new HealthCheckService(root, `http://127.0.0.1:${port}`);
     this.exporter = new ExportService(root);
 
@@ -222,6 +231,9 @@ export class DashboardPanel {
         hourly,
         cacheByDay,
         cacheSavings,
+        toolBreakdown,
+        todayToolBreakdown,
+        codexHealth,
         distinctModels,
         distinctSources,
         distinctWorkspaces,
@@ -237,6 +249,9 @@ export class DashboardPanel {
         Promise.resolve(this.reader.hourly(filter)),
         Promise.resolve(this.reader.cacheByDay(filter, this.pricingOverrides)),
         Promise.resolve(this.reader.cacheSavingsSummary(filter, this.pricingOverrides)),
+        Promise.resolve(this.reader.toolBreakdown(filter)),
+        Promise.resolve(this.reader.toolBreakdown(todayFilter)),
+        Promise.resolve(this.reader.codexHealth()),
         Promise.resolve(this.reader.distinctValues('model')),
         Promise.resolve(this.reader.distinctValues('query_source')),
         Promise.resolve(this.reader.distinctValues('workspace')),
@@ -256,6 +271,9 @@ export class DashboardPanel {
           hourly,
           cacheByDay,
           cacheSavings,
+          toolBreakdown,
+          todayToolBreakdown,
+          codexHealth,
           health,
           filterOptions: {
             models: distinctModels,

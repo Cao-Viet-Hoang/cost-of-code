@@ -1,7 +1,8 @@
 export const COMPONENTS_JS = `
-/* ----- KPI card with optional sparkline & delta ----- */
+/* ----- KPI card with optional sparkline, delta & per-tool breakdown ----- */
 function kpi(opts) {
-  // opts: { label, value, title?, sub?, icon?, accent?, delta?: { pct, dir }, sparkline?: number[] }
+  // opts: { label, value, title?, sub?, icon?, accent?, delta?, sparkline?, breakdown? }
+  // breakdown: [{ tool, label, value }] — rendered as a small per-tool split row
   const iconHtml = opts.icon ? '<div class="kpi-icon">' + opts.icon + '</div>' : '';
   let deltaHtml = '';
   if (opts.delta && typeof opts.delta.pct === 'number') {
@@ -17,6 +18,16 @@ function kpi(opts) {
     ? '<svg class="kpi-sparkline" id="' + spkId + '"></svg>'
     : '';
   const sub = opts.sub ? '<div class="kpi-sub">' + opts.sub + '</div>' : '';
+  let breakdownHtml = '';
+  if (opts.breakdown && opts.breakdown.length > 0) {
+    breakdownHtml = '<div class="kpi-breakdown">' + opts.breakdown.map(b =>
+      '<span class="seg" data-tool="' + escapeHtml(b.tool) + '" title="' + escapeHtml(b.title || '') + '">' +
+        '<span class="swatch"></span>' +
+        '<span>' + escapeHtml(b.label) + '</span>' +
+        '<strong>' + b.value + '</strong>' +
+      '</span>'
+    ).join('') + '</div>';
+  }
   const html =
     '<div class="kpi ' + (opts.accent || '') + '">' +
       '<div class="kpi-header">' +
@@ -29,8 +40,16 @@ function kpi(opts) {
       '</div>' +
       spkHtml +
       sub +
+      breakdownHtml +
     '</div>';
   return { html, spkId: opts.sparkline && opts.sparkline.length > 1 ? spkId : null, sparkline: opts.sparkline, colorVar: opts.colorVar || '--chart-1' };
+}
+
+/* ----- Tool badge (Claude / Codex pill) ----- */
+function toolBadge(tool) {
+  const t = tool || 'claude';
+  const label = t === 'codex' ? 'Codex' : 'Claude';
+  return '<span class="tool-badge" data-tool="' + t + '" title="' + label + '"><span class="dot"></span>' + label + '</span>';
 }
 
 function renderKpis(hostId, kpisArr) {
