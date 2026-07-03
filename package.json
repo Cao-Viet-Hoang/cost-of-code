@@ -3,7 +3,7 @@
   "displayName": "Cost of Code",
   "publisher": "cost-of-code",
   "description": "Local-first dashboard for Claude Code token usage and estimated cost. Collects OpenTelemetry data locally and stores JSONL under ~/.claude/usage-tracker.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "license": "MIT",
   "repository": {
     "type": "git",
