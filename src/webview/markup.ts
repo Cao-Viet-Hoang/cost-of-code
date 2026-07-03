@@ -4,7 +4,7 @@ import { TRENDS_HTML }    from './tabs/trends';
 import { SESSIONS_HTML }  from './tabs/sessions';
 import { BREAKDOWN_HTML } from './tabs/breakdown';
 import { CACHE_HTML }     from './tabs/cache';
-import { HEALTH_HTML }    from './tabs/health';
+import { HEALTH_HTML, HEALTH_MODALS_HTML } from './tabs/health';
 
 /** Assembles the static body markup. */
 export function buildBodyHtml(): string {
@@ -92,6 +92,8 @@ export function buildBodyHtml(): string {
     ${CACHE_HTML}
     ${HEALTH_HTML}
   </main>
+
+  ${HEALTH_MODALS_HTML}
 
   <div id="toast" class="toast" hidden></div>
 </div>
