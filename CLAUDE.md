@@ -142,7 +142,7 @@ be in any language; code artifacts cannot.
 | ------------------------------------- | ------------------------------------------------------- |
 | Add a new dashboard command           | Register in `src/extension.ts` + declare in `package.json` `contributes.commands` |
 | Add a new config setting              | Declare in `package.json` `contributes.configuration` + read via `vscode.workspace.getConfiguration('claudeUsageTracker')` |
-| Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts` |
+| Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts`. In `usageReader.ts` the aggregation logic is duplicated between `snapshot()` (the production path) and the per-metric methods (`daily`/`sessions`/… kept as the test oracle) — update **both** or the equivalence test in `src/test/usageReader.test.ts` fails |
 | Add a new Codex model price           | Update `src/codex/pricing.ts` `DEFAULT_TABLE` (more specific prefixes first) |
 | Change Codex parsing                  | Update `src/codex/sessionReader.ts`; keep token-mapping invariant (see "Things that look like bugs") |
 | Change install behavior               | Update **both** `scripts/install.ps1` and `scripts/install.sh`, then `src/installer.ts` if the bridge signature changed |
