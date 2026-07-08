@@ -192,3 +192,26 @@ export interface FilterOptions {
   workspace?: string;
   search?: string;
 }
+
+/**
+ * Every metric a dashboard refresh needs for a given filter, computed from a
+ * single pass over the matching records instead of one pass per metric.
+ */
+export interface DashboardSnapshot {
+  totals: AggregatedTotals;
+  daily: DailyAggregate[];
+  sessions: SessionAggregate[];
+  models: ModelAggregate[];
+  workspaces: WorkspaceAggregate[];
+  sources: SourceAggregate[];
+  hourly: HourlyBucket[];
+  cacheByDay: CacheBreakdownByDay[];
+  cacheSavings: CacheSavingsSummary;
+}
+
+/** Distinct filter dropdown values, computed from a single unfiltered pass. */
+export interface DistinctFilterValues {
+  models: string[];
+  querySources: string[];
+  workspaces: string[];
+}
