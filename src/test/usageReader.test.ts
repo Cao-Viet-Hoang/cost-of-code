@@ -35,6 +35,9 @@ function buildFixture(root: string, days: number, perDay: number): void {
       const outputTokens = 100 + (i % 20) * 5;
       const cacheRead = (i % 3 === 0) ? 2000 + i : 0;
       const cacheCreate = (i % 5 === 0) ? 800 + i : 0;
+      // Tag a deterministic slice as Codex so the tool-split aggregations
+      // (toolBreakdown, session.tools) actually exercise both branches.
+      const tool = (i % 7 === 0) ? 'codex' : 'claude';
       lines.push(JSON.stringify({
         schema_version: 1,
         timestamp: ts,
@@ -52,6 +55,7 @@ function buildFixture(root: string, days: number, perDay: number): void {
         estimated_cost_usd: (inputTokens + outputTokens) * 0.000003,
         duration_ms: 200 + (i % 30) * 25,
         workspace,
+        tool,
       }));
     }
     fs.writeFileSync(path.join(usageDir, `${date}.usage.jsonl`), lines.join('\n') + '\n', 'utf8');
@@ -90,10 +94,16 @@ suite('UsageReader.snapshot / distinctAll — equivalence', () => {
     assert.deepStrictEqual(snap.hourly, reader.hourly(filter));
     assert.deepStrictEqual(snap.cacheByDay, reader.cacheByDay(filter, pricing));
     assert.deepStrictEqual(snap.cacheSavings, reader.cacheSavingsSummary(filter, pricing));
+    assert.deepStrictEqual(snap.toolBreakdown, reader.toolBreakdown(filter));
   }
 
   test('unfiltered snapshot matches each legacy per-metric call', () => {
     assertSnapshotMatchesLegacy({});
+    // Guard the fixture actually spans both tools, so the toolBreakdown /
+    // session.tools equivalence above is meaningful rather than all-claude.
+    const snap = reader.snapshot({}, pricing);
+    assert.ok(snap.toolBreakdown.codex.requests > 0, 'fixture should contain Codex records');
+    assert.ok(snap.toolBreakdown.claude.requests > 0, 'fixture should contain Claude records');
   });
 
   test('date-range filtered snapshot matches legacy calls', () => {
