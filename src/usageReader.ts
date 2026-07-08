@@ -540,7 +540,16 @@ export class UsageReader {
   /**
    * Computes every metric a dashboard refresh needs in a single pass over
    * `iterateRecords(filter)`, instead of one independent pass per metric
-   * (which is what calling daily/sessions/models/... separately does).
+   * (which is what calling daily/sessions/models/... separately does). This
+   * is the only aggregation path used in production (see DashboardPanel).
+   *
+   * NOTE: the per-metric methods below (daily/sessions/models/workspaces/
+   * sources/hourly/cacheByDay/cacheSavingsSummary) are intentionally NOT
+   * called from here — they are retained as the independent reference
+   * implementation that `usageReader.test.ts` diffs this method against
+   * (and as the "slow path" baseline for the performance regression test).
+   * If you change an aggregation rule or add a usage field, update it in
+   * BOTH places; the equivalence test will fail loudly if they drift.
    */
   snapshot(filter: FilterOptions = {}, pricing?: PricingOverrides): DashboardSnapshot {
     const totals = emptyTotals();
