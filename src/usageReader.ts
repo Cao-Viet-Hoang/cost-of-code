@@ -21,6 +21,8 @@ import type {
   ToolAggregate,
   ToolBreakdown,
   CodexHealth,
+  DashboardSnapshot,
+  DistinctFilterValues,
 } from './types';
 
 export interface CodexOptions {
@@ -618,6 +620,218 @@ export class UsageReader {
       totalCreateTokens,
       totalSavedUsd,
       hypotheticalUncachedCost: hypothetical,
+    };
+  }
+
+  /**
+   * Computes every metric a dashboard refresh needs in a single pass over
+   * `iterateRecords(filter)`, instead of one independent pass per metric
+   * (which is what calling daily/sessions/models/... separately does).
+   */
+  snapshot(filter: FilterOptions = {}, pricing?: PricingOverrides): DashboardSnapshot {
+    const totals = emptyTotals();
+
+    interface DailyAcc extends AggregatedTotals { date: string; _sessions: Set<string> }
+    interface SessionAcc extends AggregatedTotals {
+      sessionId: string; startTime: string; endTime: string;
+      _models: Set<string>; _tools: Set<Tool>; workspace?: string;
+    }
+    interface ModelAcc extends AggregatedTotals { model: string; _durs: number[] }
+    interface WorkspaceAcc extends AggregatedTotals {
+      workspace: string; _sessions: Set<string>; _models: Set<string>;
+    }
+    interface CacheDayAcc {
+      date: string; cacheReadTokens: number; cacheCreationTokens: number;
+      totalTokensWithCache: number; saved: number;
+    }
+
+    const dailyMap = new Map<string, DailyAcc>();
+    const sessionMap = new Map<string, SessionAcc>();
+    const modelMap = new Map<string, ModelAcc>();
+    const workspaceMap = new Map<string, WorkspaceAcc>();
+    const sourceMap = new Map<string, SourceAggregate>();
+    const cacheDayMap = new Map<string, CacheDayAcc>();
+    const hourlyBuckets = new Map<string, HourlyBucket>();
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        hourlyBuckets.set(`${d}|${h}`, { weekday: d, hour: h, cost: 0, requests: 0, totalTokens: 0 });
+      }
+    }
+    let cacheTotalRead = 0;
+    let cacheTotalCreate = 0;
+    let cacheTotalSaved = 0;
+    let cacheHypothetical = 0;
+    const toolClaude = emptyTotals();
+    const toolCodex = emptyTotals();
+
+    for (const r of this.iterateRecords(filter)) {
+      add(totals, r);
+      const tool: Tool = r.tool ?? 'claude';
+      add(tool === 'codex' ? toolCodex : toolClaude, r);
+      const date = r.timestamp.slice(0, 10);
+
+      let dAcc = dailyMap.get(date);
+      if (!dAcc) {
+        dAcc = { date, _sessions: new Set(), ...emptyTotals() };
+        dailyMap.set(date, dAcc);
+      }
+      add(dAcc, r);
+      if (r.session_id) { dAcc._sessions.add(r.session_id); }
+
+      const sid = r.session_id || '<unknown>';
+      let sAcc = sessionMap.get(sid);
+      if (!sAcc) {
+        sAcc = {
+          sessionId: sid, startTime: r.timestamp, endTime: r.timestamp,
+          _models: new Set(), _tools: new Set(), workspace: r.workspace, ...emptyTotals(),
+        };
+        sessionMap.set(sid, sAcc);
+      }
+      add(sAcc, r);
+      if (r.model) { sAcc._models.add(r.model); }
+      sAcc._tools.add(tool);
+      if (r.timestamp < sAcc.startTime) { sAcc.startTime = r.timestamp; }
+      if (r.timestamp > sAcc.endTime) { sAcc.endTime = r.timestamp; }
+      if (!sAcc.workspace && r.workspace) { sAcc.workspace = r.workspace; }
+
+      const m = r.model || '<unknown>';
+      let mAcc = modelMap.get(m);
+      if (!mAcc) {
+        mAcc = { model: m, _durs: [], ...emptyTotals() };
+        modelMap.set(m, mAcc);
+      }
+      add(mAcc, r);
+      if (r.duration_ms && r.duration_ms > 0) { mAcc._durs.push(r.duration_ms); }
+
+      const w = r.workspace || '<unknown>';
+      let wAcc = workspaceMap.get(w);
+      if (!wAcc) {
+        wAcc = { workspace: w, _sessions: new Set(), _models: new Set(), ...emptyTotals() };
+        workspaceMap.set(w, wAcc);
+      }
+      add(wAcc, r);
+      if (r.session_id) { wAcc._sessions.add(r.session_id); }
+      if (r.model) { wAcc._models.add(r.model); }
+
+      const s = r.query_source || '<unknown>';
+      let srcAcc = sourceMap.get(s);
+      if (!srcAcc) {
+        srcAcc = { source: s, ...emptyTotals() };
+        sourceMap.set(s, srcAcc);
+      }
+      add(srcAcc, r);
+
+      const dt = new Date(r.timestamp);
+      if (!Number.isNaN(dt.getTime())) {
+        const b = hourlyBuckets.get(`${dt.getDay()}|${dt.getHours()}`)!;
+        b.cost += r.estimated_cost_usd || 0;
+        b.requests += 1;
+        b.totalTokens += r.total_tokens_with_cache || 0;
+      }
+
+      const read = r.cache_read_tokens || 0;
+      const create = r.cache_creation_tokens || 0;
+      let cAcc = cacheDayMap.get(date);
+      if (!cAcc) {
+        cAcc = { date, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokensWithCache: 0, saved: 0 };
+        cacheDayMap.set(date, cAcc);
+      }
+      cAcc.cacheReadTokens += read;
+      cAcc.cacheCreationTokens += create;
+      cAcc.totalTokensWithCache += r.total_tokens_with_cache || 0;
+      const saved = savedByCacheRead(r.model, read, pricing);
+      cAcc.saved += saved;
+      cacheTotalRead += read;
+      cacheTotalCreate += create;
+      cacheTotalSaved += saved;
+      cacheHypothetical += hypotheticalInputCost(r.model, read, pricing);
+    }
+
+    const daily = Array.from(dailyMap.values())
+      .map(({ _sessions, ...rest }) => ({ ...rest, sessions: _sessions.size }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const sessions = Array.from(sessionMap.values())
+      .map(({ _models, _tools, ...rest }) => ({
+        ...rest,
+        models: Array.from(_models),
+        tools: Array.from(_tools),
+        durationMs: new Date(rest.endTime).getTime() - new Date(rest.startTime).getTime(),
+      }))
+      .sort((a, b) => b.endTime.localeCompare(a.endTime));
+
+    const models = Array.from(modelMap.values())
+      .map(({ _durs, ...rest }) => {
+        const sorted = _durs.slice().sort((a, b) => a - b);
+        const avg = sorted.length
+          ? sorted.reduce((s, v) => s + v, 0) / sorted.length
+          : 0;
+        return {
+          ...rest,
+          averageDurationMs: avg,
+          p50DurationMs: percentile(sorted, 0.5),
+          p95DurationMs: percentile(sorted, 0.95),
+        };
+      })
+      .sort((a, b) => b.cost - a.cost);
+
+    const workspaces = Array.from(workspaceMap.values())
+      .map(({ _sessions, _models, ...rest }) => ({
+        ...rest,
+        sessions: _sessions.size,
+        models: Array.from(_models),
+      }))
+      .sort((a, b) => b.cost - a.cost);
+
+    const sources = Array.from(sourceMap.values()).sort((a, b) => b.cost - a.cost);
+
+    const hourly = Array.from(hourlyBuckets.values());
+
+    const cacheByDay = Array.from(cacheDayMap.values())
+      .map(d => ({
+        date: d.date,
+        cacheReadTokens: d.cacheReadTokens,
+        cacheCreationTokens: d.cacheCreationTokens,
+        totalTokensWithCache: d.totalTokensWithCache,
+        cacheRatio: d.totalTokensWithCache > 0
+          ? (d.cacheReadTokens + d.cacheCreationTokens) / d.totalTokensWithCache
+          : 0,
+        estimatedSavedUsd: d.saved,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const cacheSavings: CacheSavingsSummary = {
+      totalReadTokens: cacheTotalRead,
+      totalCreateTokens: cacheTotalCreate,
+      totalSavedUsd: cacheTotalSaved,
+      hypotheticalUncachedCost: cacheHypothetical,
+    };
+
+    const toolBreakdown: ToolBreakdown = { claude: toolClaude, codex: toolCodex };
+
+    return {
+      totals, daily, sessions, models, workspaces, sources, hourly,
+      cacheByDay, cacheSavings, toolBreakdown,
+    };
+  }
+
+  /** Distinct filter dropdown values (model/query_source/workspace), one unfiltered pass. */
+  distinctAll(): DistinctFilterValues {
+    const models = new Set<string>();
+    const querySources = new Set<string>();
+    const workspaces = new Set<string>();
+    for (const r of this.iterateRecords()) {
+      if (r.model) { models.add(r.model); }
+      if (r.query_source) { querySources.add(r.query_source); }
+      if (r.workspace) { workspaces.add(r.workspace); }
+    }
+    // Also union in any workspaces we know from the SessionStart hook, even
+    // if their session_id hasn't produced an api_request yet.
+    for (const ws of this.loadSessionMeta().values()) { workspaces.add(ws); }
+    return {
+      models: Array.from(models).sort(),
+      querySources: Array.from(querySources).sort(),
+      workspaces: Array.from(workspaces).sort(),
     };
   }
 

@@ -219,43 +219,22 @@ export class DashboardPanel {
       const todayDate = new Date().toISOString().slice(0, 10);
       const todayFilter: FilterOptions = { ...filter, startDate: todayDate, endDate: todayDate };
 
-      const [
-        health,
-        today,
-        allTotals,
-        daily,
-        sessions,
-        models,
-        workspaces,
-        sources,
-        hourly,
-        cacheByDay,
-        cacheSavings,
-        toolBreakdown,
-        todayToolBreakdown,
-        codexHealth,
-        distinctModels,
-        distinctSources,
-        distinctWorkspaces,
-      ] = await Promise.all([
+      const [health, today, todayToolBreakdown, codexHealth, snapshot, distinct] = await Promise.all([
         this.health.run(),
         Promise.resolve(this.reader.totals(todayFilter)),
-        Promise.resolve(this.reader.totals(filter)),
-        Promise.resolve(this.reader.daily(filter)),
-        Promise.resolve(this.reader.sessions(filter)),
-        Promise.resolve(this.reader.models(filter)),
-        Promise.resolve(this.reader.workspaces(filter)),
-        Promise.resolve(this.reader.sources(filter)),
-        Promise.resolve(this.reader.hourly(filter)),
-        Promise.resolve(this.reader.cacheByDay(filter, this.pricingOverrides)),
-        Promise.resolve(this.reader.cacheSavingsSummary(filter, this.pricingOverrides)),
-        Promise.resolve(this.reader.toolBreakdown(filter)),
         Promise.resolve(this.reader.toolBreakdown(todayFilter)),
         Promise.resolve(this.reader.codexHealth()),
-        Promise.resolve(this.reader.distinctValues('model')),
-        Promise.resolve(this.reader.distinctValues('query_source')),
-        Promise.resolve(this.reader.distinctValues('workspace')),
+        Promise.resolve(this.reader.snapshot(filter, this.pricingOverrides)),
+        Promise.resolve(this.reader.distinctAll()),
       ]);
+
+      const {
+        totals: allTotals, daily, sessions, models, workspaces, sources, hourly,
+        cacheByDay, cacheSavings, toolBreakdown,
+      } = snapshot;
+      const distinctModels = distinct.models;
+      const distinctSources = distinct.querySources;
+      const distinctWorkspaces = distinct.workspaces;
 
       this.panel.webview.postMessage({
         type: 'data',
