@@ -14,8 +14,9 @@ estimated cost. Three pieces:
 - `collector/` — zero-dependency Node.js OTLP/HTTP receiver. Writes raw
   payloads and normalized usage records as JSONL under
   `~/.claude/usage-tracker/`.
-- `scripts/` — Windows (`*.ps1`) and Linux (`*.sh`) install / uninstall /
-  status helpers, plus `import-projects-history.js` and `build-icon.js`.
+- `scripts/` — Windows (`*.ps1`) and Unix (`*.sh`, Linux + macOS) install /
+  uninstall / status helpers, plus `import-projects-history.js` and
+  `build-icon.js`.
 - `src/` — VSCode extension (TypeScript). Registers commands, renders the
   dashboard webview, and bridges to the platform scripts.
 
@@ -94,8 +95,11 @@ be in any language; code artifacts cannot.
 
 **Scripts (`scripts/*.ps1`, `scripts/*.sh`):**
 - PowerShell scripts target Windows PowerShell 5.1+ and PowerShell 7.
-- Bash scripts target `bash` on Linux. macOS is not officially supported by
-  autostart yet.
+- Bash scripts (`*.sh`) target both Linux and macOS. They detect the OS with
+  `uname -s` and branch the autostart mechanism: launchd LaunchAgent
+  (`com.claude.usage-tracker` in `~/Library/LaunchAgents`) on macOS, systemd
+  user service (`claude-usage-tracker`) with a cron `@reboot` fallback on
+  Linux. When you touch the autostart logic, update **both** branches.
 - Keep `.ps1` and `.sh` behavior aligned — when you change one, check the
   other.
 

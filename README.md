@@ -18,7 +18,7 @@ cost-of-code/
 │   └── normalizer.js          #   Parses Claude Code log events to usage records
 ├── scripts/                   # Platform install / uninstall / status helpers
 │   ├── install.ps1            #   Windows Scheduled Task + Claude settings
-│   ├── install.sh             #   Linux systemd user service or cron fallback
+│   ├── install.sh             #   Linux systemd/cron or macOS launchd LaunchAgent
 │   ├── uninstall.*            #   Remove autostart + telemetry settings
 │   └── status.*               #   Collector diagnostics
 └── src/                       # VSCode extension
@@ -76,6 +76,8 @@ It will:
 - Register autostart:
   - Windows: Scheduled Task **`ClaudeCodeUsageTracker`** at logon.
   - Linux: systemd user service **`claude-usage-tracker`**, with cron fallback.
+  - macOS: launchd LaunchAgent **`com.claude.usage-tracker`** in
+    `~/Library/LaunchAgents`, loaded at login.
 - **Merge** Claude Code's OpenTelemetry settings into `~/.claude/settings.json`
   (under the `env` block). Other keys in the file are left untouched:
   ```jsonc
@@ -224,10 +226,9 @@ If the dashboard shows zero usage:
   `OTEL_EXPORTER_OTLP_PROTOCOL=http/json` for that reason. If Claude Code
   cannot be configured to use `http/json`, this collector will not receive its
   exports.
-- **Windows and Linux setup are supported.** Windows uses Scheduled Tasks.
-  Linux uses a systemd user service when available, with cron as a fallback.
-  macOS can run the collector manually, but launchd autostart is not packaged
-  yet.
+- **Windows, Linux, and macOS setup are supported.** Windows uses Scheduled
+  Tasks. Linux uses a systemd user service when available, with cron as a
+  fallback. macOS uses a launchd LaunchAgent (`com.claude.usage-tracker`).
 - **Single user.** Data lives under the current user's `~/.claude/usage-tracker`.
 
 ## License
