@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { DashboardPanel } from './DashboardPanel';
 import {
   runInstall, runUninstall, runStatus, runStartTask, runStopTask,
-  runLinuxInstall, runLinuxUninstall, runLinuxStatus, runLinuxStart, runLinuxStop,
-  runImportHistorical, isWindows, isLinux,
+  runUnixInstall, runUnixUninstall, runUnixStatus, runUnixStart, runUnixStop,
+  runImportHistorical, isWindows, isUnix,
 } from './installer';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -16,16 +16,16 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('claudeUsageTracker.runSetup', () => {
       if (isWindows()) { runInstall(ext); }
-      else if (isLinux()) { runLinuxInstall(ext); }
+      else if (isUnix()) { runUnixInstall(ext); }
       else {
         vscode.window.showWarningMessage(
-          'Setup is supported on Windows and Linux. On macOS, run install.sh manually.',
+          'Setup is supported on Windows, Linux, and macOS.',
         );
       }
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.uninstall', async () => {
-      if (!isWindows() && !isLinux()) { return; }
+      if (!isWindows() && !isUnix()) { return; }
       const choice = await vscode.window.showWarningMessage(
         'Stop the collector and remove the autostart entry? Your usage data is preserved.',
         { modal: true },
@@ -34,26 +34,26 @@ export function activate(context: vscode.ExtensionContext) {
       );
       if (choice === 'Uninstall') {
         if (isWindows()) { runUninstall(ext); }
-        else if (isLinux()) { runLinuxUninstall(ext); }
+        else if (isUnix()) { runUnixUninstall(ext); }
       } else if (choice === 'Uninstall and delete data') {
         if (isWindows()) { runUninstall(ext, true); }
-        else if (isLinux()) { runLinuxUninstall(ext, true); }
+        else if (isUnix()) { runUnixUninstall(ext, true); }
       }
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.startCollector', () => {
       if (isWindows()) { runStartTask(); }
-      else if (isLinux()) { runLinuxStart(); }
+      else if (isUnix()) { runUnixStart(); }
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.stopCollector', () => {
       if (isWindows()) { runStopTask(); }
-      else if (isLinux()) { runLinuxStop(); }
+      else if (isUnix()) { runUnixStop(); }
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.showStatus', () => {
       if (isWindows()) { runStatus(ext); }
-      else if (isLinux()) { runLinuxStatus(ext); }
+      else if (isUnix()) { runUnixStatus(ext); }
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.importHistorical', async () => {

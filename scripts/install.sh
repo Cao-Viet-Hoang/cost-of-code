@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cost of Code — Linux installer
+# Cost of Code — Unix installer (Linux + macOS)
 set -euo pipefail
 
 PORT=4318
@@ -24,6 +24,13 @@ BIN_DIR="$INSTALL_ROOT/bin"
 LOGS_DIR="$INSTALL_ROOT/logs"
 SERVICE_NAME="claude-usage-tracker"
 SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+# macOS uses a launchd LaunchAgent instead of systemd/cron.
+IS_MACOS=0
+if [[ "$(uname -s)" == "Darwin" ]]; then IS_MACOS=1; fi
+LAUNCHD_LABEL="com.claude.usage-tracker"
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+PLIST_PATH="$LAUNCH_AGENTS_DIR/$LAUNCHD_LABEL.plist"
 
 step() { echo "==> $1"; }
 ok()   { echo "    OK  $1"; }
@@ -77,7 +84,9 @@ ok "Wrote $RUN_NODE"
 
 # 4. Stop existing collector
 step "Stopping any existing collector"
-if command -v systemctl &>/dev/null; then
+if [[ $IS_MACOS -eq 1 ]]; then
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+elif command -v systemctl &>/dev/null; then
   systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
 fi
 pkill -f 'usage-tracker/bin/collector\.js' 2>/dev/null || true
@@ -85,7 +94,49 @@ ok "Cleared"
 
 # 5. Register autostart
 step "Registering autostart"
-if command -v systemctl &>/dev/null && systemctl --user show-environment &>/dev/null 2>&1; then
+if [[ $IS_MACOS -eq 1 ]]; then
+  mkdir -p "$LAUNCH_AGENTS_DIR"
+  cat > "$PLIST_PATH" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LAUNCHD_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$NODE_CMD</string>
+    <string>$BIN_DIR/collector.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>COLLECTOR_PORT</key>
+    <string>$PORT</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>$LOGS_DIR/collector.log</string>
+  <key>StandardErrorPath</key>
+  <string>$LOGS_DIR/collector.log</string>
+</dict>
+</plist>
+EOF
+  # -w clears any prior Disabled flag; RunAtLoad starts it immediately.
+  # Guard the load: a launchd hiccup must not abort the install before the
+  # settings.json step (set -e) — the collector can still be started manually.
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  if launchctl load -w "$PLIST_PATH"; then
+    ok "Registered launchd agent: $LAUNCHD_LABEL"
+  else
+    warn "launchctl load failed — autostart NOT active. Use 'Start collector' after setup."
+  fi
+elif command -v systemctl &>/dev/null && systemctl --user show-environment &>/dev/null 2>&1; then
   mkdir -p "$SYSTEMD_USER_DIR"
   cat > "$SYSTEMD_USER_DIR/$SERVICE_NAME.service" <<EOF
 [Unit]
@@ -191,7 +242,11 @@ NODEJS
 
 # 7. Start the collector now
 step "Starting collector now"
-if command -v systemctl &>/dev/null && systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null 2>&1; then
+if [[ $IS_MACOS -eq 1 ]]; then
+  # RunAtLoad already started it during step 5; nudge it in case it was loaded.
+  launchctl start "$LAUNCHD_LABEL" 2>/dev/null || true
+  ok "launchd agent loaded and started"
+elif command -v systemctl &>/dev/null && systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null 2>&1; then
   systemctl --user start "$SERVICE_NAME"
   sleep 1
   if systemctl --user is-active "$SERVICE_NAME" &>/dev/null 2>&1; then

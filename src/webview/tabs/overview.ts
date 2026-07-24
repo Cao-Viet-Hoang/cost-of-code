@@ -102,8 +102,8 @@ function renderOverview(d) {
   const t = d.today;
   const all = d.allTotals;
 
-  const cacheRatio = t.totalTokensWithCache > 0
-    ? (t.cacheReadTokens + t.cacheCreationTokens) / t.totalTokensWithCache
+  const cacheHitRatio = (t.cacheReadTokens + t.cacheCreationTokens) > 0
+    ? t.cacheReadTokens / (t.cacheReadTokens + t.cacheCreationTokens)
     : 0;
 
   // delta vs 7-day average (excluding today)
@@ -147,13 +147,13 @@ function renderOverview(d) {
       delta: Number.isFinite(tokenPct) ? { pct: tokenPct, dir: tokenPct > 1 ? 'up' : tokenPct < -1 ? 'down' : 'flat', tooltip: 'vs 7-day avg: ' + fmt(prevAvgTokens) } : null,
     }),
     kpi({
-      label: 'Cache ratio (today)',
-      value: t.totalTokensWithCache ? fmtPct(cacheRatio) : '—',
+      label: 'Cache hit ratio (today)',
+      value: (t.cacheReadTokens + t.cacheCreationTokens) ? fmtPct(cacheHitRatio) : '—',
       sub: fmt(t.cacheReadTokens) + ' read · ' + fmt(t.cacheCreationTokens) + ' create',
       icon: ICONS.database,
       accent: 'accent-3',
       colorVar: '--chart-3',
-      sparkline: recent.length > 1 ? recent.map(r => r.totalTokensWithCache > 0 ? (r.cacheReadTokens + r.cacheCreationTokens) / r.totalTokensWithCache : 0) : null,
+      sparkline: recent.length > 1 ? recent.map(r => (r.cacheReadTokens + r.cacheCreationTokens) > 0 ? r.cacheReadTokens / (r.cacheReadTokens + r.cacheCreationTokens) : 0) : null,
     }),
     kpi({
       label: rangeLabel(d),

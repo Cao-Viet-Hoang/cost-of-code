@@ -14,8 +14,9 @@ estimated cost. Three pieces:
 - `collector/` — zero-dependency Node.js OTLP/HTTP receiver. Writes raw
   payloads and normalized usage records as JSONL under
   `~/.claude/usage-tracker/`.
-- `scripts/` — Windows (`*.ps1`) and Linux (`*.sh`) install / uninstall /
-  status helpers, plus `import-projects-history.js` and `build-icon.js`.
+- `scripts/` — Windows (`*.ps1`) and Unix (`*.sh`, Linux + macOS) install /
+  uninstall / status helpers, plus `import-projects-history.js` and
+  `build-icon.js`.
 - `src/` — VSCode extension (TypeScript). Registers commands, renders the
   dashboard webview, and bridges to the platform scripts.
 
@@ -94,8 +95,11 @@ be in any language; code artifacts cannot.
 
 **Scripts (`scripts/*.ps1`, `scripts/*.sh`):**
 - PowerShell scripts target Windows PowerShell 5.1+ and PowerShell 7.
-- Bash scripts target `bash` on Linux. macOS is not officially supported by
-  autostart yet.
+- Bash scripts (`*.sh`) target both Linux and macOS. They detect the OS with
+  `uname -s` and branch the autostart mechanism: launchd LaunchAgent
+  (`com.claude.usage-tracker` in `~/Library/LaunchAgents`) on macOS, systemd
+  user service (`claude-usage-tracker`) with a cron `@reboot` fallback on
+  Linux. When you touch the autostart logic, update **both** branches.
 - Keep `.ps1` and `.sh` behavior aligned — when you change one, check the
   other.
 
@@ -124,7 +128,7 @@ be in any language; code artifacts cannot.
 | ------------------------------------- | ------------------------------------------------------- |
 | Add a new dashboard command           | Register in `src/extension.ts` + declare in `package.json` `contributes.commands` |
 | Add a new config setting              | Declare in `package.json` `contributes.configuration` + read via `vscode.workspace.getConfiguration('claudeUsageTracker')` |
-| Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts` |
+| Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts`. In `usageReader.ts` the aggregation logic is duplicated between `snapshot()` (the production path) and the per-metric methods (`daily`/`sessions`/… kept as the test oracle) — update **both** or the equivalence test in `src/test/usageReader.test.ts` fails |
 | Change install behavior               | Update **both** `scripts/install.ps1` and `scripts/install.sh`, then `src/installer.ts` if the bridge signature changed |
 | Ship a release                        | Bump `version` in `package.json` + `CHANGELOG.md`, then `npm run package` |
 

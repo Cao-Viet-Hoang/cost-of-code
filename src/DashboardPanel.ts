@@ -5,8 +5,8 @@ import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
   runInstall, runUninstall, runStartTask, runStopTask,
-  runLinuxInstall, runLinuxUninstall, runLinuxStart, runLinuxStop,
-  runImportHistorical, checkPort, isWindows, isLinux,
+  runUnixInstall, runUnixUninstall, runUnixStart, runUnixStop,
+  runImportHistorical, checkPort, isWindows, isUnix,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -105,11 +105,11 @@ export class DashboardPanel {
           let code: number;
           if (isWindows()) {
             code = await runInstall(this.extensionUri, port);
-          } else if (isLinux()) {
-            code = await runLinuxInstall(this.extensionUri, port);
+          } else if (isUnix()) {
+            code = await runUnixInstall(this.extensionUri, port);
           } else {
             vscode.window.showWarningMessage(
-              'Setup is supported on Windows and Linux. On macOS, run install.sh manually.',
+              'Setup is supported on Windows, Linux, and macOS.',
             );
             return;
           }
@@ -149,8 +149,8 @@ export class DashboardPanel {
         case 'runUninstall':
           if (isWindows()) {
             await runUninstall(this.extensionUri);
-          } else if (isLinux()) {
-            await runLinuxUninstall(this.extensionUri);
+          } else if (isUnix()) {
+            await runUnixUninstall(this.extensionUri);
           }
           await this.refresh();
           return;
@@ -161,12 +161,12 @@ export class DashboardPanel {
         }
         case 'startCollector':
           if (isWindows()) { await runStartTask(); }
-          else if (isLinux()) { await runLinuxStart(); }
+          else if (isUnix()) { await runUnixStart(); }
           await this.refresh();
           return;
         case 'stopCollector':
           if (isWindows()) { await runStopTask(); }
-          else if (isLinux()) { await runLinuxStop(); }
+          else if (isUnix()) { await runUnixStop(); }
           await this.refresh();
           return;
         case 'openExports': {
@@ -210,37 +210,19 @@ export class DashboardPanel {
       const todayDate = new Date().toISOString().slice(0, 10);
       const todayFilter: FilterOptions = { ...filter, startDate: todayDate, endDate: todayDate };
 
-      const [
-        health,
-        today,
-        allTotals,
-        daily,
-        sessions,
-        models,
-        workspaces,
-        sources,
-        hourly,
-        cacheByDay,
-        cacheSavings,
-        distinctModels,
-        distinctSources,
-        distinctWorkspaces,
-      ] = await Promise.all([
+      const [health, today, snapshot, distinct] = await Promise.all([
         this.health.run(),
         Promise.resolve(this.reader.totals(todayFilter)),
-        Promise.resolve(this.reader.totals(filter)),
-        Promise.resolve(this.reader.daily(filter)),
-        Promise.resolve(this.reader.sessions(filter)),
-        Promise.resolve(this.reader.models(filter)),
-        Promise.resolve(this.reader.workspaces(filter)),
-        Promise.resolve(this.reader.sources(filter)),
-        Promise.resolve(this.reader.hourly(filter)),
-        Promise.resolve(this.reader.cacheByDay(filter, this.pricingOverrides)),
-        Promise.resolve(this.reader.cacheSavingsSummary(filter, this.pricingOverrides)),
-        Promise.resolve(this.reader.distinctValues('model')),
-        Promise.resolve(this.reader.distinctValues('query_source')),
-        Promise.resolve(this.reader.distinctValues('workspace')),
+        Promise.resolve(this.reader.snapshot(filter, this.pricingOverrides)),
+        Promise.resolve(this.reader.distinctAll()),
       ]);
+
+      const {
+        totals: allTotals, daily, sessions, models, workspaces, sources, hourly, cacheByDay, cacheSavings,
+      } = snapshot;
+      const distinctModels = distinct.models;
+      const distinctSources = distinct.querySources;
+      const distinctWorkspaces = distinct.workspaces;
 
       this.panel.webview.postMessage({
         type: 'data',

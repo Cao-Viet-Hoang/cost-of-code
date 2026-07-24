@@ -56,7 +56,10 @@ export const HEALTH_HTML = `
       </div>
     </div>
   </div>
+</section>
+`;
 
+export const HEALTH_MODALS_HTML = `
   <div class="modal-bg" id="setupModal">
     <div class="modal">
       <h3>Setup Cost of Code</h3>
@@ -114,7 +117,6 @@ export const HEALTH_HTML = `
       </div>
     </div>
   </div>
-</section>
 `;
 
 export const HEALTH_JS = `

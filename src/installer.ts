@@ -264,11 +264,13 @@ export async function runStopTask(): Promise<number> {
   });
 }
 
-// ─── Linux functions ──────────────────────────────────────────────────────────
+// ─── Unix functions (Linux + macOS) ────────────────────────────────────────────
 
+// systemd user service name (Linux); launchd LaunchAgent label (macOS).
 export const LINUX_SERVICE_NAME = 'claude-usage-tracker';
+export const MAC_LAUNCHD_LABEL = 'com.claude.usage-tracker';
 
-export async function runLinuxInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
+export async function runUnixInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const sh = scriptPath(extensionUri, 'install.sh');
   const sourceDir = vscode.Uri.joinPath(extensionUri, 'collector').fsPath;
   const nodeExe = await resolveNodeOrShowError('Cost of Code — Setup');
@@ -301,7 +303,7 @@ export async function runLinuxInstall(extensionUri: vscode.Uri, port = 4318): Pr
   });
 }
 
-export async function runLinuxUninstall(extensionUri: vscode.Uri, purge = false): Promise<number> {
+export async function runUnixUninstall(extensionUri: vscode.Uri, purge = false): Promise<number> {
   const sh = scriptPath(extensionUri, 'uninstall.sh');
   // Uninstall is tolerant of a missing node runtime (it only needs one for
   // the best-effort settings.json clean step), so don't gate the whole flow
@@ -324,7 +326,7 @@ export async function runLinuxUninstall(extensionUri: vscode.Uri, purge = false)
   });
 }
 
-export async function runLinuxStatus(extensionUri: vscode.Uri, port = 4318): Promise<number> {
+export async function runUnixStatus(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const sh = scriptPath(extensionUri, 'status.sh');
   // Status is also tolerant of a missing node runtime — settings.json parse
   // is the only thing that needs it. Pass the path if we can find one.
@@ -341,23 +343,35 @@ export async function runLinuxStatus(extensionUri: vscode.Uri, port = 4318): Pro
   });
 }
 
-export async function runLinuxStart(): Promise<number> {
+export async function runUnixStart(): Promise<number> {
   const home = process.env.HOME || os.homedir();
   const collectorJs = path.join(home, '.claude', 'usage-tracker', 'bin', 'collector.js');
   const runNodeSh = path.join(home, '.claude', 'usage-tracker', 'bin', 'run-node.sh');
   const logsDir = path.join(home, '.claude', 'usage-tracker', 'logs');
+  const plistPath = path.join(home, 'Library', 'LaunchAgents', `${MAC_LAUNCHD_LABEL}.plist`);
   // Manual fallback uses the run-node.sh wrapper that install.sh wrote,
   // so the right runtime + ELECTRON_RUN_AS_NODE=1 are picked up automatically.
-  const script =
-    `if systemctl --user start ${LINUX_SERVICE_NAME} 2>/dev/null; then\n` +
-    `  echo "Started systemd service '${LINUX_SERVICE_NAME}'"\n` +
-    `elif [ -x "${runNodeSh}" ] && [ -f "${collectorJs}" ]; then\n` +
-    `  mkdir -p "${logsDir}"\n` +
-    `  nohup "${runNodeSh}" "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
-    `  echo "Spawned collector (pid=$!)"\n` +
-    `else\n` +
-    `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
-    `fi`;
+  const script = isMac()
+    // load -w (re)activates the agent; if it was already loaded, `start` nudges it.
+    ? `if [ -f "${plistPath}" ]; then\n` +
+      `  launchctl load -w "${plistPath}" 2>/dev/null || launchctl start "${MAC_LAUNCHD_LABEL}" 2>/dev/null || true\n` +
+      `  echo "Started launchd agent '${MAC_LAUNCHD_LABEL}'"\n` +
+      `elif [ -x "${runNodeSh}" ] && [ -f "${collectorJs}" ]; then\n` +
+      `  mkdir -p "${logsDir}"\n` +
+      `  nohup "${runNodeSh}" "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
+      `  echo "Spawned collector (pid=$!)"\n` +
+      `else\n` +
+      `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
+      `fi`
+    : `if systemctl --user start ${LINUX_SERVICE_NAME} 2>/dev/null; then\n` +
+      `  echo "Started systemd service '${LINUX_SERVICE_NAME}'"\n` +
+      `elif [ -x "${runNodeSh}" ] && [ -f "${collectorJs}" ]; then\n` +
+      `  mkdir -p "${logsDir}"\n` +
+      `  nohup "${runNodeSh}" "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
+      `  echo "Spawned collector (pid=$!)"\n` +
+      `else\n` +
+      `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
+      `fi`;
   return runBashHidden({
     title: 'Cost of Code — Start',
     args: ['-c', script],
@@ -366,9 +380,16 @@ export async function runLinuxStart(): Promise<number> {
   });
 }
 
-export async function runLinuxStop(): Promise<number> {
+export async function runUnixStop(): Promise<number> {
+  const home = process.env.HOME || os.homedir();
+  const plistPath = path.join(home, 'Library', 'LaunchAgents', `${MAC_LAUNCHD_LABEL}.plist`);
+  // Unload (without -w) stops the job now but leaves it enabled for next login,
+  // matching the Linux "stop but keep autostart" semantics.
+  const stopAutostart = isMac()
+    ? `launchctl unload "${plistPath}" 2>/dev/null || true\n`
+    : `systemctl --user stop ${LINUX_SERVICE_NAME} 2>/dev/null || true\n`;
   const script =
-    `systemctl --user stop ${LINUX_SERVICE_NAME} 2>/dev/null || true\n` +
+    stopAutostart +
     `pkill -f 'usage-tracker/bin/collector\\.js' 2>/dev/null && echo "Stopped collector process(es)" || echo "No collector process was running"`;
   return runBashHidden({
     title: 'Cost of Code — Stop',
@@ -446,6 +467,15 @@ export function isWindows(): boolean {
 
 export function isLinux(): boolean {
   return process.platform === 'linux';
+}
+
+export function isMac(): boolean {
+  return process.platform === 'darwin';
+}
+
+// Linux and macOS share the same bash scripts (install/uninstall/status).
+export function isUnix(): boolean {
+  return isLinux() || isMac();
 }
 
 export function expectedInstallRoot(): string {
