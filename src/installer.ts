@@ -18,6 +18,95 @@ function scriptPath(extensionUri: vscode.Uri, name: string): string {
   return vscode.Uri.joinPath(extensionUri, 'scripts', name).fsPath;
 }
 
+// Resolves the Node.js-compatible runtime to use. Strategy:
+//   1. Prefer a real `node` on PATH (Node >= 18). Standalone binaries are
+//      smaller and survive VSCode updates/uninstalls.
+//   2. Fall back to process.execPath — the host runtime. In the VSCode
+//      extension host this is usually the Electron binary (Code.exe), which
+//      behaves as pure Node.js when ELECTRON_RUN_AS_NODE=1 is set.
+//   3. If neither responds to `--version`, throw — the caller surfaces a
+//      user-facing error.
+//
+// ELECTRON_RUN_AS_NODE=1 is set unconditionally on spawn. The variable is
+// ignored by a real node binary, so it is safe in both cases.
+let cachedNodeExe: string | undefined;
+
+function probeNodeMajor(exe: string, env: NodeJS.ProcessEnv): number | undefined {
+  const v = cp.spawnSync(exe, ['--version'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    env,
+    timeout: 5000,
+  });
+  if (v.status !== 0 || !v.stdout) {
+    return undefined;
+  }
+  const m = v.stdout.trim().match(/^v(\d+)/);
+  if (!m) {
+    return undefined;
+  }
+  const major = parseInt(m[1], 10);
+  return Number.isFinite(major) ? major : undefined;
+}
+
+function findSystemNode(): string | undefined {
+  const cmd = process.platform === 'win32' ? 'where.exe' : 'which';
+  const which = cp.spawnSync(cmd, ['node'], { encoding: 'utf8', windowsHide: true });
+  if (which.status !== 0 || !which.stdout) {
+    return undefined;
+  }
+  const first = which.stdout.split(/\r?\n/).map(s => s.trim()).find(s => s.length > 0);
+  if (!first) {
+    return undefined;
+  }
+  const major = probeNodeMajor(first, process.env);
+  return major !== undefined && major >= 18 ? first : undefined;
+}
+
+function findHostNode(): string | undefined {
+  const exe = process.execPath;
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+  const major = probeNodeMajor(exe, env);
+  return major !== undefined && major >= 18 ? exe : undefined;
+}
+
+function nodeExePath(): string {
+  if (cachedNodeExe !== undefined) {
+    return cachedNodeExe;
+  }
+  const channel = getChannel();
+  const system = findSystemNode();
+  if (system) {
+    cachedNodeExe = system;
+    channel.appendLine(`[node] using system Node.js at ${system}`);
+    return cachedNodeExe;
+  }
+  const host = findHostNode();
+  if (host) {
+    cachedNodeExe = host;
+    channel.appendLine(`[node] no Node >=18 on PATH; using host runtime ${host} (ELECTRON_RUN_AS_NODE=1)`);
+    return cachedNodeExe;
+  }
+  throw new Error(
+    'No Node.js 18+ runtime found. Install Node.js from https://nodejs.org and retry.',
+  );
+}
+
+function nodeSpawnEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+}
+
+async function resolveNodeOrShowError(title: string): Promise<string | undefined> {
+  try {
+    return nodeExePath();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    getChannel().appendLine(`[${title}] ${msg}`);
+    await vscode.window.showErrorMessage(`${title}: ${msg}`);
+    return undefined;
+  }
+}
+
 interface RunOptions {
   title: string;
   args: string[];
@@ -96,9 +185,15 @@ function runBashHidden(opts: RunOptions): Promise<number> {
 
 export async function runInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const ps = scriptPath(extensionUri, 'install.ps1');
+  const nodeExe = await resolveNodeOrShowError('Cost of Code — Setup');
+  if (!nodeExe) { return -1; }
   return runPowerShellHidden({
     title: 'Cost of Code — Setup',
-    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps, '-Port', String(port)],
+    args: [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps,
+      '-Port', String(port),
+      '-NodeExe', nodeExe,
+    ],
     withProgress: true,
     successMessage:
       'Cost of Code installed. Collector is running and will autostart at logon. ' +
@@ -178,9 +273,16 @@ export const MAC_LAUNCHD_LABEL = 'com.claude.usage-tracker';
 export async function runUnixInstall(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const sh = scriptPath(extensionUri, 'install.sh');
   const sourceDir = vscode.Uri.joinPath(extensionUri, 'collector').fsPath;
+  const nodeExe = await resolveNodeOrShowError('Cost of Code — Setup');
+  if (!nodeExe) { return -1; }
   return runBashHidden({
     title: 'Cost of Code — Setup',
-    args: [sh, '--port', String(port), '--source-dir', sourceDir],
+    args: [
+      sh,
+      '--port', String(port),
+      '--source-dir', sourceDir,
+      '--node-exe', nodeExe,
+    ],
     withProgress: true,
     successMessage:
       'Cost of Code installed. Collector is running and will autostart at login. ' +
@@ -203,7 +305,15 @@ export async function runUnixInstall(extensionUri: vscode.Uri, port = 4318): Pro
 
 export async function runUnixUninstall(extensionUri: vscode.Uri, purge = false): Promise<number> {
   const sh = scriptPath(extensionUri, 'uninstall.sh');
+  // Uninstall is tolerant of a missing node runtime (it only needs one for
+  // the best-effort settings.json clean step), so don't gate the whole flow
+  // on resolution success here.
   const args = [sh];
+  try {
+    args.push('--node-exe', nodeExePath());
+  } catch {
+    // ignore — uninstall.sh will skip the settings.json step.
+  }
   if (purge) { args.push('--purge-data'); }
   return runBashHidden({
     title: 'Cost of Code — Uninstall',
@@ -218,9 +328,17 @@ export async function runUnixUninstall(extensionUri: vscode.Uri, purge = false):
 
 export async function runUnixStatus(extensionUri: vscode.Uri, port = 4318): Promise<number> {
   const sh = scriptPath(extensionUri, 'status.sh');
+  // Status is also tolerant of a missing node runtime — settings.json parse
+  // is the only thing that needs it. Pass the path if we can find one.
+  const args = [sh, '--port', String(port)];
+  try {
+    args.push('--node-exe', nodeExePath());
+  } catch {
+    // ignore
+  }
   return runBashHidden({
     title: 'Cost of Code — Status',
-    args: [sh, '--port', String(port)],
+    args,
     revealOnSuccess: true,
   });
 }
@@ -228,25 +346,28 @@ export async function runUnixStatus(extensionUri: vscode.Uri, port = 4318): Prom
 export async function runUnixStart(): Promise<number> {
   const home = process.env.HOME || os.homedir();
   const collectorJs = path.join(home, '.claude', 'usage-tracker', 'bin', 'collector.js');
+  const runNodeSh = path.join(home, '.claude', 'usage-tracker', 'bin', 'run-node.sh');
   const logsDir = path.join(home, '.claude', 'usage-tracker', 'logs');
   const plistPath = path.join(home, 'Library', 'LaunchAgents', `${MAC_LAUNCHD_LABEL}.plist`);
+  // Manual fallback uses the run-node.sh wrapper that install.sh wrote,
+  // so the right runtime + ELECTRON_RUN_AS_NODE=1 are picked up automatically.
   const script = isMac()
     // load -w (re)activates the agent; if it was already loaded, `start` nudges it.
     ? `if [ -f "${plistPath}" ]; then\n` +
       `  launchctl load -w "${plistPath}" 2>/dev/null || launchctl start "${MAC_LAUNCHD_LABEL}" 2>/dev/null || true\n` +
       `  echo "Started launchd agent '${MAC_LAUNCHD_LABEL}'"\n` +
-      `elif [ -f "${collectorJs}" ]; then\n` +
+      `elif [ -x "${runNodeSh}" ] && [ -f "${collectorJs}" ]; then\n` +
       `  mkdir -p "${logsDir}"\n` +
-      `  nohup node "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
+      `  nohup "${runNodeSh}" "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
       `  echo "Spawned collector (pid=$!)"\n` +
       `else\n` +
       `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
       `fi`
     : `if systemctl --user start ${LINUX_SERVICE_NAME} 2>/dev/null; then\n` +
       `  echo "Started systemd service '${LINUX_SERVICE_NAME}'"\n` +
-      `elif [ -f "${collectorJs}" ]; then\n` +
+      `elif [ -x "${runNodeSh}" ] && [ -f "${collectorJs}" ]; then\n` +
       `  mkdir -p "${logsDir}"\n` +
-      `  nohup node "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
+      `  nohup "${runNodeSh}" "${collectorJs}" </dev/null >>"${logsDir}/collector.log" 2>&1 &\n` +
       `  echo "Spawned collector (pid=$!)"\n` +
       `else\n` +
       `  echo "Collector not found at ${collectorJs}. Run Setup first." >&2; exit 1\n` +
@@ -294,12 +415,18 @@ export async function runImportHistorical(
   const args = [js];
   if (opts.dryRun) { args.push('--dry-run'); }
 
+  const nodeExe = await resolveNodeOrShowError(title);
+  if (!nodeExe) { return -1; }
   channel.appendLine('');
   channel.appendLine(`=== ${title} @ ${new Date().toISOString()} ===`);
-  channel.appendLine(`> node ${args.join(' ')}`);
+  channel.appendLine(`> ${nodeExe} ${args.join(' ')}`);
 
   const exec = () => new Promise<number>((resolve) => {
-    const proc = cp.spawn('node', args, { windowsHide: true, shell: false });
+    const proc = cp.spawn(nodeExe, args, {
+      windowsHide: true,
+      shell: false,
+      env: nodeSpawnEnv(),
+    });
     proc.stdout.on('data', (d) => channel.append(d.toString()));
     proc.stderr.on('data', (d) => channel.append(d.toString()));
     proc.on('error', (err) => {
@@ -326,7 +453,7 @@ export async function runImportHistorical(
   } else {
     channel.show(true);
     const choice = await vscode.window.showErrorMessage(
-      `Historical import failed (exit ${code}). Is Node.js installed and on PATH?`,
+      `Historical import failed (exit ${code}). See output for details.`,
       'Show output',
     );
     if (choice === 'Show output') { channel.show(true); }

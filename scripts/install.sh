@@ -4,11 +4,13 @@ set -euo pipefail
 
 PORT=4318
 SOURCE_DIR=""
+NODE_EXE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)       PORT="$2"; shift 2 ;;
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
+    --node-exe)   NODE_EXE="$2"; shift 2 ;;
     *)            echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -34,12 +36,20 @@ step() { echo "==> $1"; }
 ok()   { echo "    OK  $1"; }
 warn() { echo "    !!  $1"; }
 
-# 1. Locate node
-step "Locating node"
-if ! NODE_CMD="$(command -v node 2>/dev/null)"; then
-  echo "Error: node not found on PATH. Install Node.js 18+ and try again." >&2; exit 1
+# 1. Locate Node.js-compatible runtime
+step "Locating Node.js runtime"
+if [[ -n "$NODE_EXE" ]]; then
+  if [[ ! -x "$NODE_EXE" && ! -f "$NODE_EXE" ]]; then
+    echo "Error: provided --node-exe path does not exist: $NODE_EXE" >&2; exit 1
+  fi
+  NODE_CMD="$NODE_EXE"
+  ok "node (provided) = $NODE_CMD"
+elif NODE_CMD="$(command -v node 2>/dev/null)"; then
+  ok "node = $NODE_CMD"
+else
+  echo "Error: no Node.js runtime found. Install Node.js 18+ (or run Setup from the VSCode command palette so the extension can provide its bundled runtime)." >&2
+  exit 1
 fi
-ok "node = $NODE_CMD"
 
 # 2. Create directories
 step "Creating install directories under $INSTALL_ROOT"
@@ -58,6 +68,19 @@ for f in collector.js normalizer.js record-session.js package.json; do
   cp -f "$src" "$BIN_DIR/$f"
 done
 ok "Installed collector files"
+
+# 3b. Emit a small wrapper that pins ELECTRON_RUN_AS_NODE=1 and the resolved
+# $NODE_CMD. Anything that needs to "just run node" (the SessionStart hook
+# in particular) calls this wrapper, so the same setup works whether
+# $NODE_CMD is a real node binary or VSCode's bundled Electron.
+RUN_NODE="$BIN_DIR/run-node.sh"
+cat > "$RUN_NODE" <<EOF
+#!/usr/bin/env bash
+export ELECTRON_RUN_AS_NODE=1
+exec "$NODE_CMD" "\$@"
+EOF
+chmod +x "$RUN_NODE"
+ok "Wrote $RUN_NODE"
 
 # 4. Stop existing collector
 step "Stopping any existing collector"
@@ -123,6 +146,7 @@ Description=Cost of Code collector
 Type=simple
 ExecStart=$NODE_CMD $BIN_DIR/collector.js
 Environment=COLLECTOR_PORT=$PORT
+Environment=ELECTRON_RUN_AS_NODE=1
 Restart=on-failure
 RestartSec=5
 
@@ -133,8 +157,9 @@ EOF
   systemctl --user enable "$SERVICE_NAME"
   ok "Registered systemd user service: $SERVICE_NAME"
 elif command -v crontab &>/dev/null; then
-  # Fallback: cron @reboot entry
-  CRON_CMD="@reboot $NODE_CMD $BIN_DIR/collector.js"
+  # Fallback: cron @reboot entry. Cron runs with an empty environment, so we
+  # set ELECTRON_RUN_AS_NODE=1 inline (harmless for a real node binary).
+  CRON_CMD="@reboot ELECTRON_RUN_AS_NODE=1 $NODE_CMD $BIN_DIR/collector.js"
   (crontab -l 2>/dev/null | grep -v 'usage-tracker/bin/collector\.js'; echo "$CRON_CMD") | crontab -
   ok "Registered @reboot cron entry"
 else
@@ -147,12 +172,15 @@ step "Configuring Claude Code OpenTelemetry env in ~/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
 SETTINGS_FILE="$HOME/.claude/settings.json" \
+HOOK_WRAPPER="$RUN_NODE" \
 HOOK_JS="$BIN_DIR/record-session.js" \
 COLLECTOR_PORT="$PORT" \
-node - <<'NODEJS'
+ELECTRON_RUN_AS_NODE=1 \
+"$NODE_CMD" - <<'NODEJS'
 const fs = require('fs');
 const settingsPath = process.env.SETTINGS_FILE;
 const hookJs = process.env.HOOK_JS;
+const hookWrapper = process.env.HOOK_WRAPPER;
 const port = process.env.COLLECTOR_PORT;
 
 let settings = {};
@@ -189,7 +217,9 @@ for (const [k, v] of Object.entries(envVars)) {
 if (!settings.hooks || typeof settings.hooks !== 'object') { settings.hooks = {}; }
 if (!Array.isArray(settings.hooks.SessionStart)) { settings.hooks.SessionStart = []; }
 
-const hookCmd = 'node "' + hookJs + '"';
+// Go through run-node.sh so the hook works for users who do not have
+// 'node' on PATH (e.g. those who only use the VSCode Claude Code extension).
+const hookCmd = '"' + hookWrapper + '" "' + hookJs + '"';
 let found = false;
 for (const entry of settings.hooks.SessionStart) {
   if (entry && Array.isArray(entry.hooks)) {
@@ -225,7 +255,7 @@ elif command -v systemctl &>/dev/null && systemctl --user is-enabled "$SERVICE_N
     warn "Service may not have started — check: journalctl --user -u $SERVICE_NAME"
   fi
 else
-  nohup "$NODE_CMD" "$BIN_DIR/collector.js" </dev/null >>"$LOGS_DIR/collector.log" 2>&1 &
+  ELECTRON_RUN_AS_NODE=1 nohup "$NODE_CMD" "$BIN_DIR/collector.js" </dev/null >>"$LOGS_DIR/collector.log" 2>&1 &
   COLLECTOR_PID=$!
   ok "Spawned collector directly (pid=$COLLECTOR_PID)"
 fi
