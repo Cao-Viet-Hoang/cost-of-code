@@ -3,9 +3,50 @@
 Cost of Code is a local-first dashboard for Claude Code usage, tokens, and
 estimated cost. It receives Claude Code OpenTelemetry events on `localhost`,
 writes them to JSONL under `~/.claude/usage-tracker/`, and renders a VSCode
-dashboard with views for Overview, Daily, Sessions, Models, Cache, and Health.
+dashboard with tabs for Overview, Trends, Sessions, Breakdown, Cache, and
+Health.
 
 No cloud, no account, no remote server. Privacy-safe by default.
+
+---
+
+## Dashboard
+
+*Screenshots are cropped below the fold to hide personal project details —
+install the extension to see the full picture.*
+
+**Overview** — today's cost, tokens, cache ratio, and the current period's
+cost trend and per-model split.
+
+![Overview tab](media/screenshot-dashboard/overview.png)
+
+**Trends** — daily cost over the selected range, token mix per day, and an
+activity heatmap by hour/day of week.
+
+![Trends tab](media/screenshot-dashboard/trend.png)
+
+**Cache** — cache read/creation volume, hit ratio, and estimated savings from
+prompt caching.
+
+![Cache tab](media/screenshot-dashboard/cache.png)
+
+Every view supports filtering by date range, model, source, and workspace.
+
+---
+
+## Commands
+
+| Command                                                          | What it does                                                                                           |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Cost of Code: Open Dashboard`                                   | Opens the dashboard webview.                                                                            |
+| `Cost of Code: Run Setup (install collector + autostart)`        | Installs the collector and registers autostart. The setup dialog lets you pick a port and **Check** whether it's free before installing. |
+| `Cost of Code: Start Collector`                                  | Starts the collector if it isn't already running.                                                       |
+| `Cost of Code: Stop Collector`                                   | Stops the running collector.                                                                             |
+| `Cost of Code: Show Collector Status`                            | Shows autostart state, the HTTP endpoint and port, the status file, and telemetry env — use this to confirm the collector is reachable. |
+| `Cost of Code: Uninstall Collector`                              | Stops the collector and removes the autostart entry. Usage data is preserved.                           |
+| `Cost of Code: Import Historical Usage (from ~/.claude/projects)` | Backfills usage from past Claude Code transcripts. Supports a dry-run preview; dates already covered by OTEL are skipped, so re-running is safe. |
+
+All of these are also available as buttons on the dashboard's **Health** tab.
 
 ---
 
@@ -178,18 +219,6 @@ Claude Code itself and is **not** authoritative billing.
 | `claudeUsageTracker.collectorPort`         | `4318`  | Port the local collector listens on           |
 | `claudeUsageTracker.autoRefreshSeconds`    | `15`    | 0 disables auto-refresh                       |
 | `claudeUsageTracker.pricing`               | `{}`    | Per-model pricing overrides per 1M tokens     |
-
----
-
-## Commands
-
-- `Cost of Code: Open Dashboard`
-- `Cost of Code: Run Setup (install collector + autostart)`
-- `Cost of Code: Start Collector`
-- `Cost of Code: Stop Collector`
-- `Cost of Code: Show Collector Status`
-- `Cost of Code: Uninstall Collector`
-- `Cost of Code: Import Historical Usage (from ~/.claude/projects)`
 
 ---
 
