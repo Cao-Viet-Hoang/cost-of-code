@@ -15,16 +15,28 @@ export const CACHE_HTML = `
   <div class="card chart-card">
     <div class="card-header">
       <div>
+        <h3 class="card-title">Cache hit ratio over time</h3>
+        <p class="card-desc">read / (read + creation), per day</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <svg id="cacheHitRatioSvg" class="chart"></svg>
+      <div class="empty" id="cacheChartEmpty" hidden>
+        <div class="empty-icon">${ICONS.database}</div>
+        <p>No cache data yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-header">
+      <div>
         <h3 class="card-title">Cache ratio over time</h3>
         <p class="card-desc">(read + creation) / total tokens, per day</p>
       </div>
     </div>
     <div class="card-body">
       <svg id="cacheRatioSvg" class="chart"></svg>
-      <div class="empty" id="cacheChartEmpty" hidden>
-        <div class="empty-icon">${ICONS.database}</div>
-        <p>No cache data yet.</p>
-      </div>
     </div>
   </div>
 
@@ -73,6 +85,7 @@ function renderCache(d) {
 
   const tbody = document.querySelector('#cacheTable tbody');
   const empty = document.getElementById('cacheChartEmpty');
+  const svgH  = document.getElementById('cacheHitRatioSvg');
   const svg   = document.getElementById('cacheRatioSvg');
   const svgS  = document.getElementById('cacheSavedSvg');
   const thead = document.getElementById('cacheThead');
@@ -83,6 +96,7 @@ function renderCache(d) {
     sortableHeader('cache', 'cacheCreationTokens',  'Cache create',  { num: true }) +
     sortableHeader('cache', 'totalTokensWithCache', 'Total cached',  { num: true }) +
     sortableHeader('cache', 'cacheRatio',           'Cache ratio',   { num: true }) +
+    sortableHeader('cache', 'cacheHitRatio',        'Hit ratio',     { num: true }) +
     sortableHeader('cache', 'estimatedSavedUsd',    'Est. saved',    { num: true }) +
   '</tr>';
 
@@ -92,6 +106,7 @@ function renderCache(d) {
   const totalTokens = sav.totalReadTokens + sav.totalCreateTokens;
   const all = d.allTotals;
   const ratio = all && all.totalTokensWithCache > 0 ? totalTokens / all.totalTokensWithCache : 0;
+  const hitRatio = totalTokens > 0 ? sav.totalReadTokens / totalTokens : 0;
   const wouldHavePaid = (all ? all.cost : 0) + sav.totalSavedUsd;
   const savingsPct = wouldHavePaid > 0 ? sav.totalSavedUsd / wouldHavePaid : 0;
 
@@ -120,6 +135,13 @@ function renderCache(d) {
       accent: 'accent-4',
     }),
     kpi({
+      label: 'Cache hit ratio',
+      value: totalTokens > 0 ? fmtPct(hitRatio) : '—',
+      sub: 'read / (read + create)',
+      icon: ICONS.database,
+      accent: 'accent-1',
+    }),
+    kpi({
       label: 'Estimated saved',
       value: fmtCostShort(sav.totalSavedUsd),
       title: fmtCost(sav.totalSavedUsd),
@@ -132,14 +154,19 @@ function renderCache(d) {
 
   if (cacheBy.length === 0) {
     empty.hidden = false;
+    svgH.style.display = 'none';
     svg.style.display = 'none';
     svgS.innerHTML = '';
     tbody.innerHTML = '';
     return;
   }
   empty.hidden = true;
+  svgH.style.display = '';
   svg.style.display = '';
 
+  drawAreaChart(svgH, cacheBy, r => r.cacheHitRatio, r => fmtDate(r.date), {
+    valueFmt: fmtPct, colorVar: '--chart-1', yMax: 1, yMin: 0,
+  });
   drawAreaChart(svg, cacheBy, r => r.cacheRatio, r => fmtDate(r.date), {
     valueFmt: fmtPct, colorVar: '--chart-3', yMax: 1, yMin: 0,
   });
@@ -153,6 +180,7 @@ function renderCache(d) {
     cacheCreationTokens: r => r.cacheCreationTokens,
     totalTokensWithCache: r => r.totalTokensWithCache,
     cacheRatio: r => r.cacheRatio,
+    cacheHitRatio: r => r.cacheHitRatio,
     estimatedSavedUsd: r => r.estimatedSavedUsd,
   };
   const rows = getSorted('cache', cacheBy, getters);
@@ -163,6 +191,7 @@ function renderCache(d) {
       '<td class="num">' + fmt(r.cacheCreationTokens) + '</td>' +
       '<td class="num">' + fmt(r.totalTokensWithCache) + '</td>' +
       '<td class="num">' + fmtPct(r.cacheRatio) + '</td>' +
+      '<td class="num">' + fmtPct(r.cacheHitRatio) + '</td>' +
       '<td class="num">' + fmtCostShort(r.estimatedSavedUsd) + '</td>' +
     '</tr>'
   )).join('');

@@ -5,8 +5,8 @@ import { ExportService, ExportFormat } from './exportService';
 import { getPaths } from './paths';
 import {
   runInstall, runUninstall, runStartTask, runStopTask,
-  runLinuxInstall, runLinuxUninstall, runLinuxStart, runLinuxStop,
-  runImportHistorical, checkPort, isWindows, isLinux,
+  runUnixInstall, runUnixUninstall, runUnixStart, runUnixStop,
+  runImportHistorical, checkPort, isWindows, isUnix,
 } from './installer';
 import type { FilterOptions } from './types';
 import type { PricingOverrides } from './pricing';
@@ -114,11 +114,11 @@ export class DashboardPanel {
           let code: number;
           if (isWindows()) {
             code = await runInstall(this.extensionUri, port);
-          } else if (isLinux()) {
-            code = await runLinuxInstall(this.extensionUri, port);
+          } else if (isUnix()) {
+            code = await runUnixInstall(this.extensionUri, port);
           } else {
             vscode.window.showWarningMessage(
-              'Setup is supported on Windows and Linux. On macOS, run install.sh manually.',
+              'Setup is supported on Windows, Linux, and macOS.',
             );
             return;
           }
@@ -158,8 +158,8 @@ export class DashboardPanel {
         case 'runUninstall':
           if (isWindows()) {
             await runUninstall(this.extensionUri);
-          } else if (isLinux()) {
-            await runLinuxUninstall(this.extensionUri);
+          } else if (isUnix()) {
+            await runUnixUninstall(this.extensionUri);
           }
           await this.refresh();
           return;
@@ -170,12 +170,12 @@ export class DashboardPanel {
         }
         case 'startCollector':
           if (isWindows()) { await runStartTask(); }
-          else if (isLinux()) { await runLinuxStart(); }
+          else if (isUnix()) { await runUnixStart(); }
           await this.refresh();
           return;
         case 'stopCollector':
           if (isWindows()) { await runStopTask(); }
-          else if (isLinux()) { await runLinuxStop(); }
+          else if (isUnix()) { await runUnixStop(); }
           await this.refresh();
           return;
         case 'openExports': {

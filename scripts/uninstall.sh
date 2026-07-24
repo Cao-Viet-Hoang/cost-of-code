@@ -1,19 +1,39 @@
 #!/usr/bin/env bash
-# Cost of Code — Linux uninstaller
+# Cost of Code — Unix uninstaller (Linux + macOS)
 set -euo pipefail
 
 PURGE_DATA=0
+NODE_EXE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --purge-data) PURGE_DATA=1; shift ;;
+    --node-exe)   NODE_EXE="$2"; shift 2 ;;
     *)            echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
+# Resolve a node-compatible runtime. Prefer the explicitly provided one
+# (the VSCode extension passes its host runtime here); fall back to PATH.
+# If neither is available we still continue — the settings.json clean step
+# is best-effort and we don't want a missing node to block uninstall.
+if [[ -n "$NODE_EXE" && ( -x "$NODE_EXE" || -f "$NODE_EXE" ) ]]; then
+  NODE_CMD="$NODE_EXE"
+elif NODE_CMD="$(command -v node 2>/dev/null)"; then
+  :
+else
+  NODE_CMD=""
+fi
+
 SERVICE_NAME="claude-usage-tracker"
 INSTALL_ROOT="$HOME/.claude/usage-tracker"
 SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+# macOS uses a launchd LaunchAgent instead of systemd/cron.
+IS_MACOS=0
+if [[ "$(uname -s)" == "Darwin" ]]; then IS_MACOS=1; fi
+LAUNCHD_LABEL="com.claude.usage-tracker"
+PLIST_PATH="$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
 
 step() { echo "==> $1"; }
 ok()   { echo "    OK  $1"; }
@@ -21,22 +41,28 @@ warn() { echo "    !!  $1"; }
 
 # 1. Stop and disable autostart
 step "Removing autostart"
-if command -v systemctl &>/dev/null; then
-  systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
-  systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
-  rm -f "$SYSTEMD_USER_DIR/$SERVICE_NAME.service"
-  systemctl --user daemon-reload 2>/dev/null || true
-  ok "Removed systemd service"
-fi
-if command -v crontab &>/dev/null; then
-  # Only modify crontab if our entry actually exists — avoids accidentally
-  # rewriting the user's crontab when they had none to begin with.
-  EXISTING_CRON="$(crontab -l 2>/dev/null || true)"
-  if echo "$EXISTING_CRON" | grep -q 'usage-tracker/bin/collector\.js'; then
-    echo "$EXISTING_CRON" | grep -v 'usage-tracker/bin/collector\.js' | crontab -
-    ok "Removed cron entry"
-  else
-    ok "No cron entry to remove"
+if [[ $IS_MACOS -eq 1 ]]; then
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  rm -f "$PLIST_PATH"
+  ok "Removed launchd agent"
+else
+  if command -v systemctl &>/dev/null; then
+    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "$SYSTEMD_USER_DIR/$SERVICE_NAME.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    ok "Removed systemd service"
+  fi
+  if command -v crontab &>/dev/null; then
+    # Only modify crontab if our entry actually exists — avoids accidentally
+    # rewriting the user's crontab when they had none to begin with.
+    EXISTING_CRON="$(crontab -l 2>/dev/null || true)"
+    if echo "$EXISTING_CRON" | grep -q 'usage-tracker/bin/collector\.js'; then
+      echo "$EXISTING_CRON" | grep -v 'usage-tracker/bin/collector\.js' | crontab -
+      ok "Removed cron entry"
+    else
+      ok "No cron entry to remove"
+    fi
   fi
 fi
 
@@ -51,8 +77,8 @@ fi
 # 3. Remove OTEL keys and hooks from ~/.claude/settings.json
 step "Removing OpenTelemetry keys from ~/.claude/settings.json"
 SETTINGS_FILE="$HOME/.claude/settings.json"
-if [[ -f "$SETTINGS_FILE" ]]; then
-  SETTINGS_FILE="$SETTINGS_FILE" node - <<'NODEJS'
+if [[ -f "$SETTINGS_FILE" && -n "$NODE_CMD" ]]; then
+  SETTINGS_FILE="$SETTINGS_FILE" ELECTRON_RUN_AS_NODE=1 "$NODE_CMD" - <<'NODEJS'
 const fs = require('fs');
 const settingsPath = process.env.SETTINGS_FILE;
 const OUR_KEYS = [
@@ -110,8 +136,10 @@ if (settings.hooks && Array.isArray(settings.hooks.SessionStart)) {
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
 process.stdout.write('    OK  Updated ' + settingsPath + '\n');
 NODEJS
-else
+elif [[ ! -f "$SETTINGS_FILE" ]]; then
   ok "settings.json not found — nothing to clean"
+else
+  warn "No node runtime available — leaving settings.json unchanged"
 fi
 
 # 4. Optionally purge data

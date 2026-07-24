@@ -3,9 +3,50 @@
 Cost of Code is a local-first dashboard for Claude Code usage, tokens, and
 estimated cost. It receives Claude Code OpenTelemetry events on `localhost`,
 writes them to JSONL under `~/.claude/usage-tracker/`, and renders a VSCode
-dashboard with views for Overview, Daily, Sessions, Models, Cache, and Health.
+dashboard with tabs for Overview, Trends, Sessions, Breakdown, Cache, and
+Health.
 
 No cloud, no account, no remote server. Privacy-safe by default.
+
+---
+
+## Dashboard
+
+*Screenshots are cropped below the fold to hide personal project details —
+install the extension to see the full picture.*
+
+**Overview** — today's cost, tokens, cache ratio, and the current period's
+cost trend and per-model split.
+
+![Overview tab](media/screenshot-dashboard/overview.png)
+
+**Trends** — daily cost over the selected range, token mix per day, and an
+activity heatmap by hour/day of week.
+
+![Trends tab](media/screenshot-dashboard/trend.png)
+
+**Cache** — cache read/creation volume, hit ratio, and estimated savings from
+prompt caching.
+
+![Cache tab](media/screenshot-dashboard/cache.png)
+
+Every view supports filtering by date range, model, source, and workspace.
+
+---
+
+## Commands
+
+| Command                                                          | What it does                                                                                           |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Cost of Code: Open Dashboard`                                   | Opens the dashboard webview.                                                                            |
+| `Cost of Code: Run Setup (install collector + autostart)`        | Installs the collector and registers autostart. The setup dialog lets you pick a port and **Check** whether it's free before installing. |
+| `Cost of Code: Start Collector`                                  | Starts the collector if it isn't already running.                                                       |
+| `Cost of Code: Stop Collector`                                   | Stops the running collector.                                                                             |
+| `Cost of Code: Show Collector Status`                            | Shows autostart state, the HTTP endpoint and port, the status file, and telemetry env — use this to confirm the collector is reachable. |
+| `Cost of Code: Uninstall Collector`                              | Stops the collector and removes the autostart entry. Usage data is preserved.                           |
+| `Cost of Code: Import Historical Usage (from ~/.claude/projects)` | Backfills usage from past Claude Code transcripts. Supports a dry-run preview; dates already covered by OTEL are skipped, so re-running is safe. |
+
+All of these are also available as buttons on the dashboard's **Health** tab.
 
 ---
 
@@ -18,7 +59,7 @@ cost-of-code/
 │   └── normalizer.js          #   Parses Claude Code log events to usage records
 ├── scripts/                   # Platform install / uninstall / status helpers
 │   ├── install.ps1            #   Windows Scheduled Task + Claude settings
-│   ├── install.sh             #   Linux systemd user service or cron fallback
+│   ├── install.sh             #   Linux systemd/cron or macOS launchd LaunchAgent
 │   ├── uninstall.*            #   Remove autostart + telemetry settings
 │   └── status.*               #   Collector diagnostics
 └── src/                       # VSCode extension
@@ -76,6 +117,8 @@ It will:
 - Register autostart:
   - Windows: Scheduled Task **`ClaudeCodeUsageTracker`** at logon.
   - Linux: systemd user service **`claude-usage-tracker`**, with cron fallback.
+  - macOS: launchd LaunchAgent **`com.claude.usage-tracker`** in
+    `~/Library/LaunchAgents`, loaded at login.
 - **Merge** Claude Code's OpenTelemetry settings into `~/.claude/settings.json`
   (under the `env` block). Other keys in the file are left untouched:
   ```jsonc
@@ -179,18 +222,6 @@ Claude Code itself and is **not** authoritative billing.
 
 ---
 
-## Commands
-
-- `Cost of Code: Open Dashboard`
-- `Cost of Code: Run Setup (install collector + autostart)`
-- `Cost of Code: Start Collector`
-- `Cost of Code: Stop Collector`
-- `Cost of Code: Show Collector Status`
-- `Cost of Code: Uninstall Collector`
-- `Cost of Code: Import Historical Usage (from ~/.claude/projects)`
-
----
-
 ## Development Commands
 
 ```sh
@@ -224,10 +255,9 @@ If the dashboard shows zero usage:
   `OTEL_EXPORTER_OTLP_PROTOCOL=http/json` for that reason. If Claude Code
   cannot be configured to use `http/json`, this collector will not receive its
   exports.
-- **Windows and Linux setup are supported.** Windows uses Scheduled Tasks.
-  Linux uses a systemd user service when available, with cron as a fallback.
-  macOS can run the collector manually, but launchd autostart is not packaged
-  yet.
+- **Windows, Linux, and macOS setup are supported.** Windows uses Scheduled
+  Tasks. Linux uses a systemd user service when available, with cron as a
+  fallback. macOS uses a launchd LaunchAgent (`com.claude.usage-tracker`).
 - **Single user.** Data lives under the current user's `~/.claude/usage-tracker`.
 
 ## License

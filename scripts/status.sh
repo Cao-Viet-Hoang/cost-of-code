@@ -1,20 +1,48 @@
 #!/usr/bin/env bash
-# Cost of Code — Linux status reporter
+# Cost of Code — Unix status reporter (Linux + macOS)
 
 PORT=4318
+NODE_EXE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --port) PORT="$2"; shift 2 ;;
-    *)      echo "Unknown argument: $1" >&2; exit 1 ;;
+    --port)     PORT="$2"; shift 2 ;;
+    --node-exe) NODE_EXE="$2"; shift 2 ;;
+    *)          echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+
+# Prefer the provided node-compatible runtime (VSCode extension supplies one);
+# fall back to PATH; tolerate absence — only one section needs node.
+if [[ -n "$NODE_EXE" && ( -x "$NODE_EXE" || -f "$NODE_EXE" ) ]]; then
+  NODE_CMD="$NODE_EXE"
+elif NODE_CMD="$(command -v node 2>/dev/null)"; then
+  :
+else
+  NODE_CMD=""
+fi
 
 SERVICE_NAME="claude-usage-tracker"
 INSTALL_ROOT="$HOME/.claude/usage-tracker"
 STATUS_FILE="$INSTALL_ROOT/status.json"
 
+IS_MACOS=0
+if [[ "$(uname -s)" == "Darwin" ]]; then IS_MACOS=1; fi
+LAUNCHD_LABEL="com.claude.usage-tracker"
+PLIST_PATH="$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
+
 echo "== Autostart =="
-if command -v systemctl &>/dev/null; then
+if [[ $IS_MACOS -eq 1 ]]; then
+  if [[ -f "$PLIST_PATH" ]]; then
+    echo "  LaunchAgent registered: $PLIST_PATH"
+    if launchctl list "$LAUNCHD_LABEL" &>/dev/null; then
+      echo "  launchd job '$LAUNCHD_LABEL' is loaded."
+    else
+      echo "  launchd job '$LAUNCHD_LABEL' is not loaded (stopped). Run 'Start collector'."
+    fi
+  else
+    echo "  LaunchAgent '$LAUNCHD_LABEL' is not registered. Run Setup to install."
+  fi
+elif command -v systemctl &>/dev/null; then
   if systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null 2>&1; then
     systemctl --user status "$SERVICE_NAME" --no-pager 2>&1 | head -15 | sed 's/^/  /'
   else
@@ -56,8 +84,8 @@ fi
 echo ""
 echo "== Claude Code settings.json (env block) =="
 SETTINGS="$HOME/.claude/settings.json"
-if [[ -f "$SETTINGS" ]]; then
-  SETTINGS_FILE="$SETTINGS" node - <<'NODEJS'
+if [[ -f "$SETTINGS" && -n "$NODE_CMD" ]]; then
+  SETTINGS_FILE="$SETTINGS" ELECTRON_RUN_AS_NODE=1 "$NODE_CMD" - <<'NODEJS'
 const fs = require('fs');
 const settingsPath = process.env.SETTINGS_FILE;
 try {
@@ -81,6 +109,8 @@ try {
   process.stderr.write('  Could not parse settings.json: ' + e.message + '\n');
 }
 NODEJS
-else
+elif [[ ! -f "$SETTINGS" ]]; then
   echo "  Missing: $SETTINGS"
+else
+  echo "  No node runtime available — cannot parse settings.json"
 fi

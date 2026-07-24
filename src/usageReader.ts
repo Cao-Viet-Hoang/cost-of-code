@@ -597,6 +597,9 @@ export class UsageReader {
         cacheRatio: d.totalTokensWithCache > 0
           ? (d.cacheReadTokens + d.cacheCreationTokens) / d.totalTokensWithCache
           : 0,
+        cacheHitRatio: (d.cacheReadTokens + d.cacheCreationTokens) > 0
+          ? d.cacheReadTokens / (d.cacheReadTokens + d.cacheCreationTokens)
+          : 0,
         estimatedSavedUsd: d.saved,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -804,6 +807,9 @@ export class UsageReader {
         totalTokensWithCache: d.totalTokensWithCache,
         cacheRatio: d.totalTokensWithCache > 0
           ? (d.cacheReadTokens + d.cacheCreationTokens) / d.totalTokensWithCache
+          : 0,
+        cacheHitRatio: (d.cacheReadTokens + d.cacheCreationTokens) > 0
+          ? d.cacheReadTokens / (d.cacheReadTokens + d.cacheCreationTokens)
           : 0,
         estimatedSavedUsd: d.saved,
       }))
