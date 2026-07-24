@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getPaths } from './paths';
 import { UsageReader } from './usageReader';
-import { LINUX_SERVICE_NAME } from './installer';
+import { LINUX_SERVICE_NAME, MAC_LAUNCHD_LABEL } from './installer';
 import type {
   CollectorStatus,
   HealthReport,
@@ -17,6 +17,10 @@ import type {
 
 const execFileP = promisify(execFile);
 const TASK_NAME = 'ClaudeCodeUsageTracker';
+
+function macPlistPath(): string {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents', `${MAC_LAUNCHD_LABEL}.plist`);
+}
 
 interface ClaudeSettings {
   env?: Record<string, string | number | boolean>;
@@ -92,6 +96,11 @@ export class HealthCheckService {
         return false;
       }
     }
+    if (process.platform === 'darwin') {
+      // The LaunchAgent plist stays on disk while registered, even when the
+      // job is stopped (unloaded) — so file existence is the autostart signal.
+      return fs.existsSync(macPlistPath());
+    }
     if (process.platform === 'linux') {
       // Try systemd user service first
       try {
@@ -111,6 +120,18 @@ export class HealthCheckService {
   }
 
   async scheduledTaskDetail(): Promise<ScheduledTaskDetail | null> {
+    if (process.platform === 'darwin') {
+      if (!fs.existsSync(macPlistPath())) {
+        return { registered: false, state: null, lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+      }
+      // `launchctl list <label>` exits 0 only when the job is currently loaded.
+      try {
+        await execFileP('launchctl', ['list', MAC_LAUNCHD_LABEL]);
+        return { registered: true, state: 'running', lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+      } catch {
+        return { registered: true, state: 'stopped', lastRunTime: null, lastTaskResult: null, nextRunTime: null };
+      }
+    }
     if (process.platform === 'linux') {
       try {
         const { stdout } = await execFileP('systemctl', [

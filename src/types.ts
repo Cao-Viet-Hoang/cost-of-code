@@ -171,6 +171,8 @@ export interface CacheBreakdownByDay {
   cacheCreationTokens: number;
   totalTokensWithCache: number;
   cacheRatio: number;
+  /** Fraction of cache accesses that were hits: read / (read + creation). */
+  cacheHitRatio: number;
   /** Estimated USD saved by serving cache_read instead of fresh input. */
   estimatedSavedUsd: number;
 }

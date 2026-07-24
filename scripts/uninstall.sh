@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cost of Code — Linux uninstaller
+# Cost of Code — Unix uninstaller (Linux + macOS)
 set -euo pipefail
 
 PURGE_DATA=0
@@ -15,28 +15,40 @@ SERVICE_NAME="claude-usage-tracker"
 INSTALL_ROOT="$HOME/.claude/usage-tracker"
 SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
+# macOS uses a launchd LaunchAgent instead of systemd/cron.
+IS_MACOS=0
+if [[ "$(uname -s)" == "Darwin" ]]; then IS_MACOS=1; fi
+LAUNCHD_LABEL="com.claude.usage-tracker"
+PLIST_PATH="$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
+
 step() { echo "==> $1"; }
 ok()   { echo "    OK  $1"; }
 warn() { echo "    !!  $1"; }
 
 # 1. Stop and disable autostart
 step "Removing autostart"
-if command -v systemctl &>/dev/null; then
-  systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
-  systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
-  rm -f "$SYSTEMD_USER_DIR/$SERVICE_NAME.service"
-  systemctl --user daemon-reload 2>/dev/null || true
-  ok "Removed systemd service"
-fi
-if command -v crontab &>/dev/null; then
-  # Only modify crontab if our entry actually exists — avoids accidentally
-  # rewriting the user's crontab when they had none to begin with.
-  EXISTING_CRON="$(crontab -l 2>/dev/null || true)"
-  if echo "$EXISTING_CRON" | grep -q 'usage-tracker/bin/collector\.js'; then
-    echo "$EXISTING_CRON" | grep -v 'usage-tracker/bin/collector\.js' | crontab -
-    ok "Removed cron entry"
-  else
-    ok "No cron entry to remove"
+if [[ $IS_MACOS -eq 1 ]]; then
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  rm -f "$PLIST_PATH"
+  ok "Removed launchd agent"
+else
+  if command -v systemctl &>/dev/null; then
+    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "$SYSTEMD_USER_DIR/$SERVICE_NAME.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    ok "Removed systemd service"
+  fi
+  if command -v crontab &>/dev/null; then
+    # Only modify crontab if our entry actually exists — avoids accidentally
+    # rewriting the user's crontab when they had none to begin with.
+    EXISTING_CRON="$(crontab -l 2>/dev/null || true)"
+    if echo "$EXISTING_CRON" | grep -q 'usage-tracker/bin/collector\.js'; then
+      echo "$EXISTING_CRON" | grep -v 'usage-tracker/bin/collector\.js' | crontab -
+      ok "Removed cron entry"
+    else
+      ok "No cron entry to remove"
+    fi
   fi
 fi
 

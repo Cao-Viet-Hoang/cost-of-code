@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cost of Code — Linux status reporter
+# Cost of Code — Unix status reporter (Linux + macOS)
 
 PORT=4318
 while [[ $# -gt 0 ]]; do
@@ -13,8 +13,24 @@ SERVICE_NAME="claude-usage-tracker"
 INSTALL_ROOT="$HOME/.claude/usage-tracker"
 STATUS_FILE="$INSTALL_ROOT/status.json"
 
+IS_MACOS=0
+if [[ "$(uname -s)" == "Darwin" ]]; then IS_MACOS=1; fi
+LAUNCHD_LABEL="com.claude.usage-tracker"
+PLIST_PATH="$HOME/Library/LaunchAgents/$LAUNCHD_LABEL.plist"
+
 echo "== Autostart =="
-if command -v systemctl &>/dev/null; then
+if [[ $IS_MACOS -eq 1 ]]; then
+  if [[ -f "$PLIST_PATH" ]]; then
+    echo "  LaunchAgent registered: $PLIST_PATH"
+    if launchctl list "$LAUNCHD_LABEL" &>/dev/null; then
+      echo "  launchd job '$LAUNCHD_LABEL' is loaded."
+    else
+      echo "  launchd job '$LAUNCHD_LABEL' is not loaded (stopped). Run 'Start collector'."
+    fi
+  else
+    echo "  LaunchAgent '$LAUNCHD_LABEL' is not registered. Run Setup to install."
+  fi
+elif command -v systemctl &>/dev/null; then
   if systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null 2>&1; then
     systemctl --user status "$SERVICE_NAME" --no-pager 2>&1 | head -15 | sed 's/^/  /'
   else

@@ -4,6 +4,14 @@ All notable changes to the "cost-of-code" extension will be documented in this f
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-22
+
+- Add macOS support for setup, uninstall, status, and collector start/stop.
+  macOS registers a launchd LaunchAgent (`com.claude.usage-tracker`) in
+  `~/Library/LaunchAgents` for autostart at login. The `install.sh`,
+  `uninstall.sh`, and `status.sh` scripts now detect the OS (`uname`) and
+  branch between systemd/cron (Linux) and launchd (macOS).
+
 ## [0.1.3] - 2026-07-08
 
 - Optimize dashboard refresh: aggregate every metric in a single pass over the
