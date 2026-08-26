@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { DashboardPanel } from './DashboardPanel';
+import { SidebarView } from './SidebarView';
 import {
   runInstall, runUninstall, runStatus, runStartTask, runStopTask,
   runUnixInstall, runUnixUninstall, runUnixStatus, runUnixStart, runUnixStop,
@@ -8,10 +9,18 @@ import {
 
 export function activate(context: vscode.ExtensionContext) {
   const ext = context.extensionUri;
+  const sidebar = new SidebarView(ext);
 
   context.subscriptions.push(
+    sidebar,
+    vscode.window.registerWebviewViewProvider(SidebarView.viewType, sidebar),
+
     vscode.commands.registerCommand('claudeUsageTracker.openDashboard', () => {
       DashboardPanel.show(ext);
+    }),
+
+    vscode.commands.registerCommand('claudeUsageTracker.refreshSidebar', () => {
+      void sidebar.refresh();
     }),
 
     vscode.commands.registerCommand('claudeUsageTracker.runSetup', () => {

@@ -37,7 +37,8 @@ collector/        OTLP receiver (collector.js, normalizer.js, record-session.js)
 scripts/          install / uninstall / status (.ps1 + .sh), build-icon, import
 src/              VSCode extension TypeScript sources
   extension.ts        Command registration entry point
-  DashboardPanel.ts   Webview with 6 tabs
+  DashboardPanel.ts   Webview panel (editor tab) with 6 tabs
+  SidebarView.ts      Compact WebviewViewProvider shown in the Explorer
   usageReader.ts      JSONL aggregation
   healthCheck.ts      Collector health probe
   exportService.ts    JSONL/CSV export
@@ -121,12 +122,52 @@ be in any language; code artifacts cannot.
   Other keys in that file belong to the user — never clobber them.
 - OTLP/JSON only (no protobuf). Setup forces
   `OTEL_EXPORTER_OTLP_PROTOCOL=http/json`.
+- `src/webview/sidebar.ts` styles chrome with `--vscode-*` theme variables
+  (unlike the dashboard's own HSL palette in `src/webview/styles.ts`) and uses
+  two fixed, mode-validated data-mark palettes: `--slice-1..3` for the
+  top-model donut, `--accent-mark` for the trend line. `TOP_MODEL_COUNT`
+  (`src/SidebarView.ts`) and `SLICE_COLORS` (`src/webview/sidebar.ts`) must
+  stay in step, and the remainder must keep being folded into `otherModels` —
+  drop either and the on-screen percentages stop summing to today's cost. The
+  donut prints no numbers on the chart itself; cost/share live in the hover
+  tooltip only, so keep the `.donut`/`.slices` flex-basis equal.
+- The Explorer view **cannot** set its own height — `contributes.views[].initialSize`
+  is ignored in the built-in `explorer` container, which instead splits height
+  evenly by pane weight. The only lever is content height, so the sidebar is
+  kept under **~470px** tall at typical widths; measure with
+  `document.body.getBoundingClientRect().height` before adding content.
+- The sidebar's status stamp renders `lastActivityAt` (mirrors
+  `health.lastUsageAt`), never `updatedAt` — `updatedAt` is stamped and
+  formatted in the same tick, so as a relative time it would always read "0s
+  ago"; it stays in the status tooltip instead. The stamp has its own 30s
+  `setInterval` so it keeps aging when `autoRefreshSeconds` is `0`.
+- `claudeUsageTracker.autoRefreshSeconds` drives both `DashboardPanel` (1s
+  countdown with pause/resume, `src/webview/state.ts`) and `SidebarView`
+  (a plain interval, no countdown) — each reads it independently, so keep both
+  in sync if its meaning changes.
+- The sidebar's trend line buckets on the **UTC** clock
+  (`UsageReader.hourlyTimeline`), matching how `FilterOptions.startDate/endDate`
+  compare `timestamp.slice(0, 10)` — so the hours sum exactly back to the
+  Today figure, at the cost that the axis starts at UTC-midnight in local time
+  (labels are localized via `fmtHour`, so instants stay correct).
+  `hourlyTimeline()` is deliberately separate from `hourly()` (a 24x7 grid,
+  unordered) and outside `snapshot()` because only the sidebar reads it.
+- `hidden` is an `HTMLElement` property; assigning `svgNode.hidden = false`
+  silently does nothing. The sidebar hides its donut by toggling the wrapping
+  `<div class="donut-wrap">` and its sparkline via `style.display`, never the
+  `<svg>` node's `hidden` property.
+- The sidebar shows sub-cent costs as `<$0.01` (fixed-shape `fmtCost`), unlike
+  the dashboard's full precision — the exact value is in the hover title.
+- The sidebar's custom CSS variables are declared on `body`, not `:root` —
+  they derive from `--vscode-*` variables, which are inherited, so a `:root`
+  declaration could resolve before those exist and silently compute to empty.
 
 ## Common workflows
 
 | You want to…                          | Do this                                                 |
 | ------------------------------------- | ------------------------------------------------------- |
 | Add a new dashboard command           | Register in `src/extension.ts` + declare in `package.json` `contributes.commands` |
+| Change the Explorer sidebar view      | Update `src/SidebarView.ts` (provider + payload) and `src/webview/sidebar.ts` (CSS/markup/client JS); the view id `claudeUsageTracker.sidebar` is declared in `package.json` `contributes.views.explorer` and referenced by `contributes.menus.view/title` |
 | Add a new config setting              | Declare in `package.json` `contributes.configuration` + read via `vscode.workspace.getConfiguration('claudeUsageTracker')` |
 | Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts`. In `usageReader.ts` the aggregation logic is duplicated between `snapshot()` (the production path) and the per-metric methods (`daily`/`sessions`/… kept as the test oracle) — update **both** or the equivalence test in `src/test/usageReader.test.ts` fails |
 | Change install behavior               | Update **both** `scripts/install.ps1` and `scripts/install.sh`, then `src/installer.ts` if the bridge signature changed |

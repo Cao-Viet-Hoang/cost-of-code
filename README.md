@@ -32,6 +32,13 @@ prompt caching.
 
 Every view supports filtering by date range, model, source, and workspace.
 
+**Explorer view** — a collapsible **Cost of Code** section sits in the Explorer
+next to Timeline and Outline: today's cost with a change-vs-yesterday delta and
+a trend line of today's spend hour by hour, a donut of today's cost by model,
+the cache hit ratio, and the collector state. Everything has a hover tooltip,
+and one button opens the full dashboard. Drag it to the Secondary Side Bar to
+keep it visible while you work.
+
 ---
 
 ## Commands
@@ -39,6 +46,7 @@ Every view supports filtering by date range, model, source, and workspace.
 | Command                                                          | What it does                                                                                           |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `Cost of Code: Open Dashboard`                                   | Opens the dashboard webview.                                                                            |
+| `Cost of Code: Refresh Explorer View`                            | Re-reads usage data for the compact Explorer view (also on the view's title bar).                       |
 | `Cost of Code: Run Setup (install collector + autostart)`        | Installs the collector and registers autostart. The setup dialog lets you pick a port and **Check** whether it's free before installing. |
 | `Cost of Code: Start Collector`                                  | Starts the collector if it isn't already running.                                                       |
 | `Cost of Code: Stop Collector`                                   | Stops the running collector.                                                                             |
@@ -64,7 +72,8 @@ cost-of-code/
 │   └── status.*               #   Collector diagnostics
 └── src/                       # VSCode extension
     ├── extension.ts           # Command registration
-    ├── DashboardPanel.ts      # Webview with 6 tabs
+    ├── DashboardPanel.ts      # Webview panel (editor tab) with 6 tabs
+    ├── SidebarView.ts         # Compact Explorer webview view
     ├── usageReader.ts         # Reads / aggregates JSONL
     ├── healthCheck.ts         # Health probe (HTTP + status file + task)
     ├── exportService.ts       # JSONL/CSV export
@@ -217,7 +226,7 @@ Claude Code itself and is **not** authoritative billing.
 | ------------------------------------------ | ------- | --------------------------------------------- |
 | `claudeUsageTracker.dataFolder`            | `""`    | Override `~/.claude/usage-tracker`             |
 | `claudeUsageTracker.collectorPort`         | `4318`  | Port the local collector listens on           |
-| `claudeUsageTracker.autoRefreshSeconds`    | `15`    | 0 disables auto-refresh                       |
+| `claudeUsageTracker.autoRefreshSeconds`    | `15`    | Re-read interval for the dashboard **and** the Explorer view. 0 disables auto-refresh |
 | `claudeUsageTracker.pricing`               | `{}`    | Per-model pricing overrides per 1M tokens     |
 
 ---

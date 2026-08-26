@@ -4,6 +4,15 @@ All notable changes to the "cost-of-code" extension will be documented in this f
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-26
+
+- Add a collapsible **Cost of Code** view in the Explorer (next to Timeline /
+  Outline): today's cost with a vs-yesterday delta and an hour-by-hour trend
+  line for today, a donut of today's cost by model (top three plus "Other"),
+  the cache hit ratio, and the collector state. It can be dragged to any side
+  bar and has refresh / open-dashboard title actions plus the new
+  `Cost of Code: Refresh Explorer View` command.
+
 ## [0.1.4] - 2026-07-22
 
 - Add macOS support for setup, uninstall, status, and collector start/stop.

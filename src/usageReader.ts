@@ -10,6 +10,7 @@ import type {
   WorkspaceAggregate,
   SourceAggregate,
   HourlyBucket,
+  HourlyPoint,
   RequestDetail,
   AggregatedTotals,
   FilterOptions,
@@ -463,6 +464,30 @@ export class UsageReader {
       b.totalTokens += r.total_tokens_with_cache || 0;
     }
     return Array.from(buckets.values());
+  }
+
+  /**
+   * Per-hour buckets in chronological order, keyed by the UTC hour each record
+   * falls in — the same clock the date filter uses, so a range's hours always
+   * sum back to that range's totals. Only hours that saw traffic are returned;
+   * gap-filling is the caller's job, because only the caller knows how far the
+   * axis should run.
+   */
+  hourlyTimeline(filter: FilterOptions = {}): HourlyPoint[] {
+    const map = new Map<string, HourlyPoint>();
+    for (const r of this.iterateRecords(filter)) {
+      const key = r.timestamp.slice(0, 13);
+      if (key.length < 13) { continue; }
+      let acc = map.get(key);
+      if (!acc) {
+        acc = { time: `${key}:00:00.000Z`, cost: 0, requests: 0, totalTokens: 0 };
+        map.set(key, acc);
+      }
+      acc.cost += r.estimated_cost_usd || 0;
+      acc.requests += 1;
+      acc.totalTokens += r.total_tokens_with_cache || 0;
+    }
+    return Array.from(map.values()).sort((a, b) => a.time.localeCompare(b.time));
   }
 
   totals(filter: FilterOptions = {}): AggregatedTotals {

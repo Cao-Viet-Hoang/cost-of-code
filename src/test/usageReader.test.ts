@@ -142,6 +142,50 @@ suite('UsageReader.snapshot / distinctAll — equivalence', () => {
   });
 });
 
+suite('UsageReader.hourlyTimeline', () => {
+  let root: string;
+  let reader: UsageReader;
+
+  suiteSetup(() => {
+    root = mkTempRoot();
+    buildFixture(root, 3, 40);
+    reader = new UsageReader(root);
+  });
+
+  suiteTeardown(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  test('every bucket starts exactly on a UTC hour and is sorted chronologically', () => {
+    const points = reader.hourlyTimeline({ startDate: '2026-01-01', endDate: '2026-01-01' });
+    assert.ok(points.length > 0);
+    for (const p of points) {
+      assert.match(p.time, /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\.000Z$/);
+    }
+    const sorted = points.slice().sort((a, b) => a.time.localeCompare(b.time));
+    assert.deepStrictEqual(points, sorted);
+  });
+
+  test('hours for a day sum back to that day\'s totals', () => {
+    const filter: FilterOptions = { startDate: '2026-01-02', endDate: '2026-01-02' };
+    const points = reader.hourlyTimeline(filter);
+    const totals = reader.totals(filter);
+
+    const summedCost = points.reduce((s, p) => s + p.cost, 0);
+    const summedRequests = points.reduce((s, p) => s + p.requests, 0);
+    const summedTokens = points.reduce((s, p) => s + p.totalTokens, 0);
+
+    assert.ok(Math.abs(summedCost - totals.cost) < 1e-9);
+    assert.strictEqual(summedRequests, totals.requests);
+    assert.strictEqual(summedTokens, totals.totalTokensWithCache);
+  });
+
+  test('a range with no matching records returns an empty array', () => {
+    const points = reader.hourlyTimeline({ startDate: '2099-01-01', endDate: '2099-01-01' });
+    assert.deepStrictEqual(points, []);
+  });
+});
+
 /**
  * Times `fn` `samples` times after a few warm-up runs and returns the fastest
  * observed duration in ms. Wall-clock micro-benchmarks in-process are noisy
