@@ -40,7 +40,8 @@ collector/        OTLP receiver (collector.js, normalizer.js, record-session.js)
 scripts/          install / uninstall / status (.ps1 + .sh), build-icon, import
 src/              VSCode extension TypeScript sources
   extension.ts        Command registration entry point
-  DashboardPanel.ts   Webview with 6 tabs
+  DashboardPanel.ts   Webview panel (editor tab) with 6 tabs
+  SidebarView.ts      Compact WebviewViewProvider shown in the Explorer
   usageReader.ts      JSONL aggregation (merges Claude + Codex into one stream)
   healthCheck.ts      Collector health probe
   exportService.ts    JSONL/CSV export
@@ -135,6 +136,96 @@ be in any language; code artifacts cannot.
   at the cached rate — keep this split in mind when changing pricing logic.
 - Codex `output_tokens` already includes `reasoning_output_tokens`; the
   reasoning count is stored separately for display only, not added on top.
+- `src/webview/sidebar.ts` styles its *chrome* with `--vscode-*` theme
+  variables instead of the dashboard's own HSL palette
+  (`src/webview/styles.ts`) — the Explorer view has to blend into the side bar,
+  the dashboard does not. Its *data marks* use three separate fixed palettes,
+  each validated on its own because they never share a chart: the two tool hues
+  (`--tool-claude` / `--tool-codex`, share bar), the three donut slots
+  (`--slice-1..3`, top-model donut), and one accent (`--accent-mark`, trend
+  line). Most are stepped per mode because no single step sits inside both
+  the light and the dark lightness band; `--accent-mark` is the exception, one
+  hex that clears both. Re-validate before changing any of them.
+- The top-model donut shows at most **three** models plus an "Other" slice.
+  A donut needs every *pair* of slices distinguishable at once (all-pairs, not
+  just adjacent), and the validated categorical palette only clears that gate
+  for three hues. `TOP_MODEL_COUNT` in `src/SidebarView.ts` and `SLICE_COLORS`
+  in `src/webview/sidebar.ts` must stay in step, and the remainder must keep
+  being folded into `otherModels` — drop it and the percentages on screen no
+  longer sum to today's cost. The chart-beside-key layout is a plain
+  `flex-wrap` on `.donut-wrap`, not a media or container query: the legend
+  drops under the donut when the side bar is too narrow for both `flex-basis`
+  values, and the same flex `gap` serves as the stacked spacing.
+- The Explorer view **cannot** set its own height. `contributes.views[].initialSize`
+  is honoured only when the view container belongs to the contributing
+  extension; ours sits in the built-in `explorer` container, so VSCode drops the
+  value and logs "tried to set the view size … but it was ignored because the
+  view container does not belong to it". VSCode then sizes every expanded pane
+  as `containerHeight * (weight || 20) / sum(weights)` — i.e. an even split with
+  the Folders pane. The only lever is content height, so the sidebar is kept
+  under **~470px** tall at typical widths (tight `--gap-section`, the tool share
+  bar folded into the Today tile with no heading of its own, donut capped at
+  104px). Measure before adding anything: `document.body.getBoundingClientRect().height`
+  in the rendered preview. Giving the view a real default height would mean
+  moving it into an extension-owned view container, which takes it out of the
+  Explorer.
+- The Today figure gets its emphasis from the **card** it sits on (`.tile`,
+  a 5% foreground tint) plus size and full-strength ink — never from decoration
+  on the figure itself. A tinted pill behind the delta and a shrunk-and-faded
+  `$` were both tried and rejected by the user as noisy: the pill out-shouted
+  the number it annotates, and the small `$` detached at the baseline. The delta
+  is plain description-grey text with only its ▲/▼ carrying the direction
+  colour. The card also replaces the hairline that used to sit under the tile
+  (`.tile + .block` clears `border-top`) — two separators for one boundary.
+- The donut carries **no** printed numbers — no total in the hole, no share in
+  the key, only the model names. Cost and share live in the hover tooltip
+  alone. That is a deliberate deviation from the usual "never gate values
+  behind a tooltip" rule, made at the user's explicit request: the tile above
+  already states today's total, and the side bar is too narrow to hold a
+  second column of figures without truncating the model names. Keep the two
+  flex bases (`.donut` / `.slices`) equal — the halves are meant to read as
+  even now that the key holds names only.
+- The sidebar's trend line and the Codex tool color are both green and cannot
+  be told apart by hue alone (normal-vision ΔE ≈ 11 in dark mode). No green in
+  the dark lightness band separates further from the Codex teal, so this is
+  accepted: the two never appear in the same chart, and the Codex swatch always
+  sits next to the word "Codex".
+- The sidebar's status stamp renders `lastActivityAt` (newest usage across both
+  tools), **not** `updatedAt`. `updatedAt` is stamped by the provider at read
+  time and formatted in the same tick, so as a relative time it can only ever
+  say "0s ago" — it looks like a freshness indicator while measuring nothing.
+  The read time stays in the status tooltip instead. `lastActivityAt` is the
+  newer of `health.lastUsageAt` (Claude) and `codexHealth.lastWriteAt` (Codex),
+  both already computed during the same refresh, so it costs no extra scan.
+  The stamp also carries its own 30s `setInterval` so it ages between payloads
+  — required when `autoRefreshSeconds` is `0` and nothing else re-renders.
+- `claudeUsageTracker.autoRefreshSeconds` is **one** setting driving **both**
+  surfaces, read independently by `DashboardPanel` and `SidebarView`. The
+  dashboard turns it into a 1s countdown with a pause/resume toggle
+  (`src/webview/state.ts`); the sidebar bakes it into a single `setInterval`
+  that posts `refresh` and shows no countdown, to save vertical space.
+- The sidebar's trend line plots **today, hour by hour** — not a month — and it
+  buckets on the **UTC** clock, because `FilterOptions.startDate/endDate` compare
+  `timestamp.slice(0, 10)` and the whole extension's "today" is therefore a UTC
+  day. That keeps the hours summing exactly back to the Today figure above them
+  (`UsageReader.hourlyTimeline`), at the cost that in a non-UTC zone the axis
+  starts at whatever local time UTC midnight is — 07:00 for UTC+7. Labels are
+  localized (`fmtHour`), so the *instants* on screen are always correct. The axis
+  stops at the hour in progress: the rest of the day is unknown, not zero.
+  `hourlyTimeline()` is deliberately separate from `hourly()`, which folds every
+  day onto one 24x7 grid for the dashboard heatmap and so cannot be plotted in
+  order; it is also outside `snapshot()` because only the sidebar reads it.
+- `hidden` is an `HTMLElement` property. Assigning `svgNode.hidden = false`
+  silently does nothing, which is why the sidebar hides its donut by toggling
+  the wrapping `<div class="donut-wrap">` and its sparkline via
+  `style.display`, never the `<svg>` node's `hidden` property.
+- The sidebar renders sub-cent costs as `<$0.01`, not `$0.0032`. Its numbers sit
+  in a narrow right-aligned column, so `fmtCost` emits one fixed shape
+  (`$0` / `<$0.01` / `$8.17` / `$420` / `$1.2K`); the exact value is in the
+  hover title. The dashboard, which has the width, still shows full precision.
+- The sidebar's custom CSS variables are declared on `body`, not `:root`. They
+  derive from `--vscode-*` variables, which are inherited — a `:root`
+  declaration can resolve before those exist and silently compute to empty.
 - Codex records map onto Claude-shaped `UsageRecord` with
   `cache_read_tokens = cached_input_tokens` and `cache_creation_tokens = 0`.
   The Cache tab is Claude-specific because cache_creation has no Codex
@@ -145,6 +236,7 @@ be in any language; code artifacts cannot.
 | You want to…                          | Do this                                                 |
 | ------------------------------------- | ------------------------------------------------------- |
 | Add a new dashboard command           | Register in `src/extension.ts` + declare in `package.json` `contributes.commands` |
+| Change the Explorer sidebar view      | Update `src/SidebarView.ts` (provider + payload) and `src/webview/sidebar.ts` (CSS/markup/client JS); the view id `claudeUsageTracker.sidebar` is declared in `package.json` `contributes.views.explorer` and referenced by `contributes.menus.view/title` |
 | Add a new config setting              | Declare in `package.json` `contributes.configuration` + read via `vscode.workspace.getConfiguration('claudeUsageTracker')` |
 | Add a new usage field                 | Update normalizer in `collector/normalizer.js` and reader/types in `src/usageReader.ts` + `src/types.ts`. In `usageReader.ts` the aggregation logic is duplicated between `snapshot()` (the production path) and the per-metric methods (`daily`/`sessions`/… kept as the test oracle) — update **both** or the equivalence test in `src/test/usageReader.test.ts` fails |
 | Add a new Codex model price           | Update `src/codex/pricing.ts` `DEFAULT_TABLE` (more specific prefixes first) |

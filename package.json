@@ -36,7 +36,14 @@
       {
         "command": "claudeUsageTracker.openDashboard",
         "title": "Open Dashboard",
-        "category": "Cost of Code"
+        "category": "Cost of Code",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "claudeUsageTracker.refreshSidebar",
+        "title": "Refresh Explorer View",
+        "category": "Cost of Code",
+        "icon": "$(refresh)"
       },
       {
         "command": "claudeUsageTracker.runSetup",
@@ -69,6 +76,32 @@
         "category": "Cost of Code"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "claudeUsageTracker.sidebar",
+          "name": "Cost of Code",
+          "type": "webview",
+          "icon": "media/icon.png",
+          "contextualTitle": "Cost of Code",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeUsageTracker.refreshSidebar",
+          "when": "view == claudeUsageTracker.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "claudeUsageTracker.openDashboard",
+          "when": "view == claudeUsageTracker.sidebar",
+          "group": "navigation@2"
+        }
+      ]
+    },
     "configuration": {
       "title": "Cost of Code",
       "properties": {
@@ -86,7 +119,7 @@
           "type": "number",
           "default": 15,
           "minimum": 0,
-          "description": "Dashboard auto-refresh interval in seconds. 0 disables auto-refresh."
+          "description": "Auto-refresh interval in seconds for the dashboard and the Explorer view. 0 disables auto-refresh."
         },
         "claudeUsageTracker.pricing": {
           "type": "object",
