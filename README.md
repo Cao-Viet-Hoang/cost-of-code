@@ -39,6 +39,8 @@ the cache hit ratio, and the collector state. Everything has a hover tooltip,
 and one button opens the full dashboard. Drag it to the Secondary Side Bar to
 keep it visible while you work.
 
+![Explorer sidebar view](media/screenshot-dashboard/sidebar_view.png)
+
 ---
 
 ## Commands

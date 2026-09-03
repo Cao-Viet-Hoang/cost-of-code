@@ -5,6 +5,7 @@
   "description": "Local-first dashboard for Claude Code token usage and estimated cost. Collects OpenTelemetry data locally and stores JSONL under ~/.claude/usage-tracker.",
   "version": "0.1.5",
   "license": "MIT",
+  "author": "Cao Viet Hoang",
   "repository": {
     "type": "git",
     "url": "https://github.com/Cao-Viet-Hoang/cost-of-code.git"
