@@ -92,6 +92,18 @@ export interface HourlyBucket {
   totalTokens: number;
 }
 
+/**
+ * One clock-hour of a real timeline, unlike `HourlyBucket`, which folds every
+ * day of the range onto a single 24x7 grid and so cannot be plotted in order.
+ */
+export interface HourlyPoint {
+  /** Bucket start as a UTC ISO instant (`YYYY-MM-DDTHH:00:00.000Z`). */
+  time: string;
+  cost: number;
+  requests: number;
+  totalTokens: number;
+}
+
 export interface RequestDetail {
   timestamp: string;
   model?: string;
